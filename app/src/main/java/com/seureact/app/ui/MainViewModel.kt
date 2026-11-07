@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.seureact.app.AppContainer
 import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraFacing
+import com.seureact.app.domain.model.CameraOverlayGeometry
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
@@ -25,18 +26,21 @@ import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.TimelineEvent
 import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.session.RecordingFinalizationPolicy
+import com.seureact.app.domain.session.RecordingCompletionIntent
 import com.seureact.app.media.capture.CameraCaptureController
 import com.seureact.app.media.capture.SessionClock
 import com.seureact.app.worker.ExportWorker
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class AppScreen { HOME, STUDIO, EXPORT }
 
@@ -46,6 +50,7 @@ data class MainUiState(
     val importing: Boolean = false,
     val isRecording: Boolean = false,
     val isFinalizing: Boolean = false,
+    val isDiscarding: Boolean = false,
     val isPlaying: Boolean = false,
     val isMuted: Boolean = false,
     val elapsedNanos: Long = 0,
@@ -66,7 +71,7 @@ class MainViewModel(application: Application, private val container: AppContaine
     val player = ExoPlayer.Builder(application).build()
     private var clock: SessionClock? = null
     private var recordingController: CameraCaptureController? = null
-    private var exportAfterFinalize = false
+    private var completionIntent = RecordingCompletionIntent.INTERRUPT
     private var activeRecordingProjectId: String? = null
     private var interruptionReason: String? = null
     private var finalizationTimeout: Job? = null
@@ -120,7 +125,7 @@ class MainViewModel(application: Application, private val container: AppContaine
         microphoneVolume: Float? = null,
     ) {
         val current = mutableState.value.project ?: return
-        val updated = current.copy(
+        val configured = current.copy(
             cameraShape = shape ?: current.cameraShape,
             outputAspect = aspect ?: current.outputAspect,
             outputResolution = resolution ?: current.outputResolution,
@@ -128,8 +133,13 @@ class MainViewModel(application: Application, private val container: AppContaine
             microphoneVolume = microphoneVolume ?: current.microphoneVolume,
             updatedAtEpochMs = System.currentTimeMillis(),
         )
+        val updated = configured.copy(cameraTransform = CameraOverlayGeometry.constrain(
+            configured.cameraTransform,
+            configured.cameraShape,
+            CameraOverlayGeometry.outputAspectRatio(configured),
+        ))
         mutableState.value = mutableState.value.copy(project = updated)
-        player.volume = updated.sourceVolume
+        player.volume = if (mutableState.value.isMuted) 0f else updated.sourceVolume
         if (mutableState.value.isRecording && sourceVolume != null) {
             persist(TimelineEvent.SourceVolumeChanged(clock!!.elapsedNanos(), player.currentPosition, sourceVolume))
         }
@@ -155,7 +165,8 @@ class MainViewModel(application: Application, private val container: AppContaine
         if (mutableState.value.isRecording || mutableState.value.isFinalizing || activeRecordingProjectId != null) return
         val rawFile = File(getApplication<Application>().filesDir, "projects/${project.id}/camera.mp4")
         recordingController = controller
-        exportAfterFinalize = false
+        clock = null
+        completionIntent = RecordingCompletionIntent.INTERRUPT
         activeRecordingProjectId = project.id
         interruptionReason = null
         runCatching { controller.start(
@@ -228,11 +239,10 @@ class MainViewModel(application: Application, private val container: AppContaine
 
     fun changeTransform(transform: CameraTransform) {
         val project = mutableState.value.project ?: return
-        val constrained = transform.copy(
-            centerX = transform.centerX.coerceIn(0.12f, 0.88f),
-            centerY = transform.centerY.coerceIn(0.12f, 0.88f),
-            width = transform.width.coerceIn(0.18f, 0.6f),
-            height = transform.height.coerceIn(0.18f, 0.6f),
+        val constrained = CameraOverlayGeometry.constrain(
+            transform,
+            project.cameraShape,
+            CameraOverlayGeometry.outputAspectRatio(project),
         )
         val updated = project.copy(cameraTransform = constrained)
         mutableState.value = mutableState.value.copy(project = updated)
@@ -262,7 +272,7 @@ class MainViewModel(application: Application, private val container: AppContaine
 
     fun placePointer(x: Float, y: Float) {
         if (!mutableState.value.isRecording) return
-        val marker = PointerMarker(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f), mutableState.value.pointerStyle)
+        val marker = PointerMarker(x.coerceIn(0.1f, 0.9f), y.coerceIn(0.08f, 0.82f), mutableState.value.pointerStyle)
         mutableState.value = mutableState.value.copy(activePointer = marker)
         persist(TimelineEvent.PointerPlaced(clock!!.elapsedNanos(), player.currentPosition, marker))
         pointerClearJob?.cancel()
@@ -292,11 +302,12 @@ class MainViewModel(application: Application, private val container: AppContaine
         if (!mutableState.value.isRecording) return
         player.pause()
         pointerClearJob?.cancel()
-        exportAfterFinalize = true
+        completionIntent = RecordingCompletionIntent.EXPORT
         interruptionReason = null
         mutableState.value = mutableState.value.copy(
             isRecording = false,
             isFinalizing = true,
+            isDiscarding = false,
             isPlaying = false,
             message = null,
         )
@@ -307,7 +318,7 @@ class MainViewModel(application: Application, private val container: AppContaine
     fun interruptRecording(reason: String = "Sessão interrompida ao sair do aplicativo") {
         val project = mutableState.value.project ?: return
         if (!mutableState.value.isRecording) return
-        exportAfterFinalize = false
+        completionIntent = RecordingCompletionIntent.INTERRUPT
         interruptionReason = reason
         recordingController?.stop()
         player.pause()
@@ -315,9 +326,28 @@ class MainViewModel(application: Application, private val container: AppContaine
         mutableState.value = mutableState.value.copy(
             isRecording = false,
             isFinalizing = true,
+            isDiscarding = false,
             isPlaying = false,
             message = null,
         )
+        scheduleFinalizationTimeout(project.id)
+    }
+
+    fun discardRecording() {
+        val project = mutableState.value.project ?: return
+        if (!mutableState.value.isRecording) return
+        completionIntent = RecordingCompletionIntent.DISCARD
+        player.pause()
+        pointerClearJob?.cancel()
+        mutableState.value = mutableState.value.copy(
+            isRecording = false,
+            isFinalizing = true,
+            isDiscarding = true,
+            isPlaying = false,
+            activePointer = null,
+            message = null,
+        )
+        recordingController?.stop()
         scheduleFinalizationTimeout(project.id)
     }
 
@@ -341,18 +371,40 @@ class MainViewModel(application: Application, private val container: AppContaine
         player.pause()
         finalizationTimeout?.cancel()
         finalizationTimeout = null
-        val decision = RecordingFinalizationPolicy.decide(exportAfterFinalize, captureError, interruptionReason)
-        exportAfterFinalize = false
+        if (clock == null) {
+            completionIntent = RecordingCompletionIntent.INTERRUPT
+            interruptionReason = null
+            mutableState.value = mutableState.value.copy(
+                isRecording = false,
+                isFinalizing = false,
+                isDiscarding = false,
+                isPlaying = false,
+                message = captureError ?: "Não foi possível iniciar a gravação.",
+            )
+            return
+        }
+        val decision = RecordingFinalizationPolicy.decide(completionIntent, captureError, interruptionReason)
+        completionIntent = RecordingCompletionIntent.INTERRUPT
         interruptionReason = null
         viewModelScope.launch {
+            if (decision.shouldDiscard) {
+                repository.deleteProject(projectId)
+                withContext(Dispatchers.IO) {
+                    File(getApplication<Application>().filesDir, "projects/$projectId").deleteRecursively()
+                }
+                clock = null
+                mutableState.value = MainUiState(message = "Gravação descartada.")
+                return@launch
+            }
             val elapsed = clock?.elapsedNanos() ?: 0L
             repository.appendEvent(projectId, TimelineEvent.SessionFinished(elapsed, player.currentPosition))
-            repository.updateStatus(projectId, decision.status, decision.error)
+            repository.updateStatus(projectId, requireNotNull(decision.status), decision.error)
             val updated = repository.getProject(projectId)
             mutableState.value = mutableState.value.copy(
                 project = updated,
                 isRecording = false,
                 isFinalizing = false,
+                isDiscarding = false,
                 isPlaying = false,
                 activePointer = null,
                 screen = if (decision.shouldExport) AppScreen.EXPORT else AppScreen.STUDIO,
@@ -417,6 +469,6 @@ class MainViewModel(application: Application, private val container: AppContaine
     private fun workName(projectId: String) = "export_$projectId"
 
     private companion object {
-        const val POINTER_DURATION_MS = 900L
+        const val POINTER_DURATION_MS = 1_200L
     }
 }

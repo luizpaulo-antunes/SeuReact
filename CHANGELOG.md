@@ -9,6 +9,26 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.1 - 2026-11-07
+
+### Corrigido
+
+- Câmera circular e quadrada agora usam crop central e escala baseada nos pixels reais da entrada e saída, evitando máscaras ovais.
+- Retângulo arredondado usa crop `4:3` sem distorcer a imagem da câmera.
+- Apontadores de dedo, seta e mouse foram redesenhados sem os traços amarelos e ganharam destaque pulsante de alto contraste.
+- Ajustar o volume não reativa o áudio original enquanto o mute estiver ligado.
+- Falhas anteriores ao primeiro frame não geram mais timelines incompletas.
+
+### Adicionado
+
+- Botão `Descartar` durante a gravação, com confirmação explícita, finalização segura da câmera e nenhuma exportação.
+- Remoção do projeto e dos arquivos da sessão somente após o usuário confirmar o descarte.
+
+### Qualidade
+
+- Auditoria dos fluxos de importação, preparação, captura, timeline, exportação, cancelamento e recuperação.
+- Vinte e seis testes unitários, Android Lint, APK debug e APK de testes instrumentados validados localmente.
+
 ## 0.2.0 - 2026-11-07
 
 ### Adicionado

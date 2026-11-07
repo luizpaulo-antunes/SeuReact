@@ -23,4 +23,21 @@ class ReactionVideoCompositorSettingsTest {
         assertEquals(720, output.width)
         assertEquals(1280, output.height)
     }
+
+    @Test
+    fun `circular camera receives equal physical dimensions on portrait output`() {
+        val project = ReactionProject(
+            sourceUri = "content://source",
+            localSourcePath = "/source.mp4",
+            metadata = SourceMetadata("vertical.mp4", 1_000, 1080, 1920, true, "video/mp4"),
+        )
+        val scale = cameraOverlayScale(
+            input = Size(1080, 1080),
+            output = Size(720, 1280),
+            transform = project.cameraTransform,
+            shape = project.cameraShape,
+        )
+
+        assertEquals(kotlin.math.abs(scale.x), scale.y, 0.0001f)
+    }
 }

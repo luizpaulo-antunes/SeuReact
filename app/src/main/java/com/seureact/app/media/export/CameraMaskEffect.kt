@@ -24,6 +24,20 @@ internal class CameraMaskEffect(private val shape: CameraShape) : GlEffect {
         CameraShape.SQUARE -> 1
         CameraShape.ROUNDED_RECTANGLE -> 2
     }
+
+    internal fun outputSize(inputWidth: Int, inputHeight: Int): Size = when (shape) {
+        CameraShape.CIRCLE, CameraShape.SQUARE -> {
+            val edge = minOf(inputWidth, inputHeight)
+            Size(edge, edge)
+        }
+        CameraShape.ROUNDED_RECTANGLE -> {
+            if (inputWidth * 3 > inputHeight * 4) {
+                Size(inputHeight * 4 / 3, inputHeight)
+            } else {
+                Size(inputWidth, inputWidth * 3 / 4)
+            }
+        }
+    }
 }
 
 @UnstableApi
@@ -32,6 +46,7 @@ private class CameraMaskShaderProgram(
     useHdr: Boolean,
     shape: CameraShape,
 ) : BaseGlShaderProgram(useHdr, 1) {
+    private val effect = CameraMaskEffect(shape)
     private val glProgram = try {
         GlProgram(context, R.raw.camera_mask_vertex_shader, R.raw.camera_mask_fragment_shader)
     } catch (error: IOException) {
@@ -45,10 +60,20 @@ private class CameraMaskShaderProgram(
         glProgram.setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), 4)
         glProgram.setFloatsUniform("uTransformationMatrix", identity)
         glProgram.setFloatsUniform("uTexTransformationMatrix", identity)
-        glProgram.setIntUniform("uShape", CameraMaskEffect(shape).shapeUniform)
+        glProgram.setIntUniform("uShape", effect.shapeUniform)
     }
 
-    override fun configure(inputWidth: Int, inputHeight: Int) = Size(inputWidth, inputHeight)
+    override fun configure(inputWidth: Int, inputHeight: Int): Size {
+        val outputSize = effect.outputSize(inputWidth, inputHeight)
+        glProgram.setFloatsUniform(
+            "uCropScale",
+            floatArrayOf(
+                outputSize.width.toFloat() / inputWidth,
+                outputSize.height.toFloat() / inputHeight,
+            ),
+        )
+        return outputSize
+    }
 
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         try {

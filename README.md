@@ -29,7 +29,7 @@ Todo evento armazena o tempo final relativo a `elapsedRealtimeNanos` e a posiç�
 
 Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute, volumes, zoom e apontadores são associados ao segmento vigente.
 
-Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface.
+Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
 
 ## Requisitos
 
@@ -67,6 +67,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 | Formato Original | mesma proporção visual da fonte, incluindo rotação 90°/270° |
 | Câmera circular/arredondada | máscara correta no preview e no MP4 |
 | Zoom e apontadores | enquadramento e destaque coincidem com a gravação |
+| Descartar gravação | câmera finaliza com segurança; projeto é removido e nenhuma exportação inicia |
 | Pausa de 30 segundos | fonte congelada; câmera e microfone contínuos |
 | Muitos seeks | saltos e repetições na ordem realizada |
 | Fonte sem áudio | comentário presente e sem falha na composição |

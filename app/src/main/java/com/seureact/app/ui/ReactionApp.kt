@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -83,6 +85,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -90,6 +93,7 @@ import androidx.media3.ui.PlayerView
 import androidx.work.WorkInfo
 import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraFacing
+import com.seureact.app.domain.model.CameraOverlayGeometry
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
@@ -232,6 +236,7 @@ private fun StudioScreen(
                 Text(
                     when {
                         state.isRecording -> "Gravando reação"
+                        state.isDiscarding -> "Descartando gravação"
                         state.isFinalizing -> "Finalizando gravação"
                         else -> "Preparar reação"
                     },
@@ -288,7 +293,7 @@ private fun StudioScreen(
                 ) {
                     CircularProgressIndicator(Modifier.size(28.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text("Finalizando câmera e microfone…")
+                    Text(if (state.isDiscarding) "Descartando gravação…" else "Finalizando câmera e microfone…")
                 }
             } else PreparationControls(project, viewModel) {
                 if (capturePermissionsGranted) {
@@ -362,8 +367,8 @@ private fun PointerMarkerIcon(marker: PointerMarker, modifier: Modifier = Modifi
     Icon(
         icon,
         pointerStyleLabel(marker.style),
-        modifier = modifier.size(48.dp).background(MaterialTheme.colorScheme.tertiary, CircleShape).padding(10.dp),
-        tint = MaterialTheme.colorScheme.onTertiary,
+        modifier = modifier.size(48.dp).background(androidx.compose.ui.graphics.Color(0xFF2563EB), CircleShape).padding(10.dp),
+        tint = androidx.compose.ui.graphics.Color.White,
     )
 }
 
@@ -387,8 +392,13 @@ private fun CameraOverlay(
         }
     }
     Box(Modifier.fillMaxSize().onSizeChanged { parentWidth = it.width; parentHeight = it.height }) {
-        val width = parentWidth * transform.width
-        val height = parentHeight * transform.height
+        val previewSize = CameraOverlayGeometry.normalizedSize(
+            transform,
+            shape,
+            parentWidth.toFloat() / parentHeight.coerceAtLeast(1),
+        )
+        val width = parentWidth * previewSize.width
+        val height = parentHeight * previewSize.height
         val widthDp = with(density) { width.toDp() }
         val heightDp = with(density) { height.toDp() }
         val clipShape = when (shape) {
@@ -470,6 +480,21 @@ private fun <T> ChoiceRow(title: String, values: List<T>, selected: T, label: (T
 
 @Composable
 private fun RecordingControls(state: MainUiState, project: ReactionProject, viewModel: MainViewModel) {
+    var confirmDiscard by remember { mutableStateOf(false) }
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Descartar esta gravação?") },
+            text = { Text("A câmera, o áudio e os eventos desta sessão serão apagados. Nenhum vídeo será exportado.") },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Continuar gravando") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    viewModel.discardRecording()
+                }) { Text("Descartar", color = MaterialTheme.colorScheme.error) }
+            },
+        )
+    }
     Column(
         Modifier.fillMaxWidth().background(
             MaterialTheme.colorScheme.surfaceContainer,
@@ -535,7 +560,25 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
             }
             IconButton(onClick = { viewModel.seekTo(state.sourcePositionMs + 5_000) }) { Icon(Icons.Default.FastForward, "Avançar 5 segundos") }
             IconButton(onClick = viewModel::toggleMute) { Icon(if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, "Áudio original") }
-            IconButton(onClick = viewModel::finishRecording, modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape)) { Icon(Icons.Default.Stop, "Finalizar") }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = { confirmDiscard = true },
+                modifier = Modifier.weight(1f).height(50.dp),
+            ) {
+                Icon(Icons.Default.DeleteOutline, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Descartar")
+            }
+            Button(
+                onClick = viewModel::finishRecording,
+                modifier = Modifier.weight(1f).height(50.dp),
+            ) {
+                Icon(Icons.Default.Stop, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Finalizar")
+            }
         }
     }
 }
@@ -577,13 +620,13 @@ private fun ExportScreen(state: MainUiState, viewModel: MainViewModel) {
             Spacer(Modifier.height(20.dp))
             Button(onClick = {
                 project?.outputUri?.let { uri ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri.toUri(), "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 }
             }) { Icon(Icons.Default.PlayArrow, null); Text(" Assistir") }
             TextButton(onClick = {
                 project?.outputUri?.let { uri ->
                     context.startActivity(Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, Uri.parse(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                        Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, uri.toUri()).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
                         "Compartilhar reação",
                     ))
                 }
