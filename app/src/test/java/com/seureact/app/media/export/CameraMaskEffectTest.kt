@@ -16,9 +16,9 @@ class CameraMaskEffectTest {
     }
 
     @Test
-    fun `circle and square crop camera input to square before masking`() {
-        assertEquals(Size(1080, 1080), CameraMaskEffect(CameraShape.CIRCLE).outputSize(1920, 1080))
-        assertEquals(Size(1080, 1080), CameraMaskEffect(CameraShape.SQUARE).outputSize(1920, 1080))
-        assertEquals(Size(1440, 1080), CameraMaskEffect(CameraShape.ROUNDED_RECTANGLE).outputSize(1920, 1080))
+    fun `mask never changes frame dimensions`() {
+        CameraShape.entries.forEach { shape ->
+            assertEquals(Size(1920, 1080), CameraMaskEffect(shape).outputSize(1920, 1080))
+        }
     }
 }

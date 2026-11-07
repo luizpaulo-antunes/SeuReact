@@ -4,7 +4,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.media3.common.util.UnstableApi
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ForegroundInfo
@@ -13,10 +15,12 @@ import com.seureact.app.R
 import com.seureact.app.ReactionApplication
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.timeline.TimelineCompiler
+import com.seureact.app.media.export.ExportFailureFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class ExportWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     private val container = (context.applicationContext as ReactionApplication).container
 
@@ -51,7 +55,8 @@ class ExportWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
             }
             throw error
         } catch (error: Throwable) {
-            val message = error.message ?: "Falha inesperada na exportação"
+            Log.e(TAG, "Falha ao exportar projeto $projectId", error)
+            val message = ExportFailureFormatter.format(error)
             container.projectRepository.updateStatus(projectId, ProjectStatus.FAILED, message)
             Result.failure(errorData(message))
         }
@@ -79,5 +84,6 @@ class ExportWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
         const val KEY_ERROR = "error"
         private const val CHANNEL_ID = "reaction_exports"
         private const val NOTIFICATION_ID = 2001
+        private const val TAG = "SeuReactExport"
     }
 }

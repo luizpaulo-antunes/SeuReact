@@ -12,6 +12,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,6 +82,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -98,11 +100,13 @@ import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
 import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.PointerMarkerLayout
 import com.seureact.app.domain.model.PointerStyle
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.media.capture.CameraCaptureController
+import com.seureact.app.media.PointerMarkerVisuals
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -314,6 +318,7 @@ private fun SourceInteractionLayer(
     onTransform: (SourceTransform) -> Unit,
     onTap: (Float, Float) -> Unit,
 ) {
+    val density = LocalDensity.current
     var width by remember { mutableIntStateOf(1) }
     var height by remember { mutableIntStateOf(1) }
     Box(
@@ -344,12 +349,24 @@ private fun SourceInteractionLayer(
         marker?.let {
             val screenX = transform.focusX + (it.x - transform.focusX) * transform.scale
             val screenY = transform.focusY + (it.y - transform.focusY) * transform.scale
+            val screenMarker = it.copy(x = screenX, y = screenY)
+            val markerSizePx = with(density) { 72.dp.toPx() }
+            val placement = PointerMarkerLayout.place(screenMarker, width.toFloat(), height.toFloat(), markerSizePx)
+            Box(
+                Modifier.offset {
+                    IntOffset(
+                        (screenX * width).roundToInt() - 6.dp.roundToPx(),
+                        (screenY * height).roundToInt() - 6.dp.roundToPx(),
+                    )
+                }.size(12.dp).background(androidx.compose.ui.graphics.Color(0x552563EB), CircleShape),
+            )
             PointerMarkerIcon(
-                marker = it,
+                marker = screenMarker,
+                placement = placement,
                 modifier = Modifier.offset {
                     IntOffset(
-                        (screenX * width).roundToInt() - 24.dp.roundToPx(),
-                        (screenY * height).roundToInt() - 24.dp.roundToPx(),
+                        placement.left.roundToInt(),
+                        placement.top.roundToInt(),
                     )
                 },
             )
@@ -358,17 +375,25 @@ private fun SourceInteractionLayer(
 }
 
 @Composable
-private fun PointerMarkerIcon(marker: PointerMarker, modifier: Modifier = Modifier) {
-    val icon = when (marker.style) {
-        PointerStyle.FINGER -> Icons.Default.TouchApp
-        PointerStyle.ARROW -> Icons.Default.ArrowUpward
-        PointerStyle.MOUSE -> Icons.Default.Mouse
-    }
-    Icon(
-        icon,
-        pointerStyleLabel(marker.style),
-        modifier = modifier.size(48.dp).background(androidx.compose.ui.graphics.Color(0xFF2563EB), CircleShape).padding(10.dp),
-        tint = androidx.compose.ui.graphics.Color.White,
+private fun PointerMarkerIcon(
+    marker: PointerMarker,
+    placement: com.seureact.app.domain.model.PointerDrawablePlacement,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    Image(
+        painter = painterResource(PointerMarkerVisuals.drawable(marker.style)),
+        contentDescription = pointerStyleLabel(marker.style),
+        modifier = modifier
+            .size(
+                with(density) { (placement.right - placement.left).toDp() },
+                with(density) { (placement.bottom - placement.top).toDp() },
+            )
+            .graphicsLayer {
+                scaleX = placement.scaleX
+                scaleY = placement.scaleY
+                transformOrigin = TransformOrigin(placement.pivotFractionX, placement.pivotFractionY)
+            },
     )
 }
 

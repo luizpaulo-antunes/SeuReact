@@ -9,6 +9,28 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.2-rc.1 - 2026-11-07
+
+### Corrigido
+
+- Regressão da `0.2.1` que causava `Video frame processing error` em todas as exportações.
+- Crop da câmera transferido para o efeito oficial `Presentation` do Media3; o shader de máscara preserva as dimensões recebidas.
+- Círculo e quadrado usam crop central `1:1`, enquanto o retângulo arredondado usa `4:3`, sem esticar a imagem.
+- Seta redesenhada como callout azul e branco, sem círculo ou amarelo, com a ponta exatamente no local tocado e orientação automática nas bordas.
+- Preview e MP4 agora compartilham os mesmos vetores, geometria, cores e hotspot para dedo, seta e mouse.
+
+### Recuperação
+
+- Erros de exportação agora diferenciam processamento de frame, decoder, encoder, áudio, muxer e entrada/saída, com código técnico curto.
+- A cadeia completa da falha é registrada no log e os arquivos brutos continuam preservados para nova tentativa.
+- Projetos que falharam na `0.2.1` podem ser reexportados nesta versão sem migração de dados.
+
+### Qualidade
+
+- Trinta e três testes unitários aprovados, incluindo regressões de dimensões da máscara, proporções e ordem dos efeitos, hotspot e inversão da seta e mensagens de exportação.
+- Android Lint, APK debug e APK de testes instrumentados validados localmente.
+- Release candidate destinada à validação no mesmo aparelho antes da promoção para `0.2.2` estável.
+
 ## 0.2.1 - 2026-11-07
 
 ### Corrigido

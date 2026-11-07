@@ -29,7 +29,7 @@ Todo evento armazena o tempo final relativo a `elapsedRealtimeNanos` e a posiç�
 
 Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute, volumes, zoom e apontadores são associados ao segmento vigente.
 
-Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
+Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Preview e MP4 usam os mesmos vetores e hotspots; na seta, a ponta termina exatamente no local tocado e a cauda se adapta às bordas. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
 
 ## Requisitos
 
@@ -81,7 +81,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 - O tempo inicial da sessão é ancorado no evento `VideoRecordEvent.Start`; aparelhos podem introduzir pequena latência interna antes do primeiro sample. Valide sincronia por modelo.
 - Seek depende da precisão do decoder e dos keyframes do arquivo; Transformer decodifica a partir do ponto seguro e recorta por timestamp.
 - O compositor Media3 é uma API marcada como instável; está isolado atrás de `ReactionExporter` para permitir troca por um pipeline MediaCodec/OpenGL próprio.
-- Máscaras, zoom e composição usam efeitos OpenGL personalizados; valide os shaders nos aparelhos e GPUs que representam o público-alvo.
+- O crop da câmera usa `Presentation` do Media3; a máscara e a composição ainda usam efeitos OpenGL. Valide o pipeline nos aparelhos e GPUs que representam o público-alvo.
 - Arquivos HDR são tratados pelo comportamento padrão do Transformer; a matriz de validação deve incluir aparelhos e codecs usados pelo público-alvo.
 
 ## Privacidade e arquivos

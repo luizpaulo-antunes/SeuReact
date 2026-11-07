@@ -2,12 +2,10 @@
 precision mediump float;
 uniform sampler2D uTexSampler;
 uniform int uShape;
-uniform vec2 uCropScale;
 varying vec2 vTexSamplingCoord;
 
 void main() {
-  vec2 samplingCoord = vec2(0.5) + (vTexSamplingCoord - vec2(0.5)) * uCropScale;
-  vec4 source = texture2D(uTexSampler, samplingCoord);
+  vec4 source = texture2D(uTexSampler, vTexSamplingCoord);
   vec2 centered = abs(vTexSamplingCoord - vec2(0.5));
   float alpha = 1.0;
   if (uShape == 0) {

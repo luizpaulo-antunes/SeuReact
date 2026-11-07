@@ -105,7 +105,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
                 startMs = segment.cameraStartNanos / 1_000_000L,
                 endMs = segment.cameraEndNanos / 1_000_000L,
                 volume = segment.microphoneVolume,
-                videoEffects = listOf(CameraMaskEffect(segment.cameraShape)),
+                videoEffects = cameraVideoEffects(segment.cameraShape),
             )
         }
         val sourceSequence = EditedMediaItemSequence.withAudioAndVideoFrom(sourceItems)
@@ -167,7 +167,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
 
     private fun sourceVideoEffects(segment: RenderSegment): List<Effect> = buildList {
         segment.pointerMarker?.let { marker ->
-            add(OverlayEffect(listOf(PointerCanvasOverlay(marker))))
+            add(OverlayEffect(listOf(PointerCanvasOverlay(context, marker))))
         }
     }
 
