@@ -74,6 +74,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
         val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         val orientedDimensions = SourceVideoGeometry.orientedSize(encodedWidth, encodedHeight, rotation)
         val sourceDisplaySize = Size(orientedDimensions.width, orientedDimensions.height)
+        val cameraDisplaySize = videoDisplaySize(cameraFile)
         val sourceItems = try {
             segments.mapIndexed { index, segment ->
                 when (segment.sourceMode) {
@@ -115,8 +116,28 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
             ReactionVideoLayer.SOURCE to sourceSequence,
         )
         return Composition.Builder(ReactionVideoLayerOrder.compositionOrder.map(sequences::getValue))
-            .setVideoCompositorSettings(ReactionVideoCompositorSettings(project, segments, sourceDisplaySize))
+            .setVideoCompositorSettings(
+                ReactionVideoCompositorSettings(project, segments, sourceDisplaySize, cameraDisplaySize),
+            )
             .build()
+    }
+
+    private fun videoDisplaySize(file: File): Size {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val width = checkNotNull(
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull(),
+            ) { "Largura da câmera indisponível" }
+            val height = checkNotNull(
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull(),
+            ) { "Altura da câmera indisponível" }
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val oriented = SourceVideoGeometry.orientedSize(width, height, rotation)
+            Size(oriented.width, oriented.height)
+        } finally {
+            retriever.release()
+        }
     }
 
     private fun editedVideo(

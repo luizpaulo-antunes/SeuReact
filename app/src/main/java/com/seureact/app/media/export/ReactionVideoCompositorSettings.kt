@@ -36,16 +36,19 @@ class ReactionVideoCompositorSettings(
     private val project: ReactionProject,
     private val segments: List<RenderSegment>,
     private val sourceDisplaySize: Size = Size(project.metadata.width, project.metadata.height),
+    private val cameraInputSize: Size,
 ) : VideoCompositorSettings {
-    private var cameraInputSize: Size? = null
-    private var outputSize: Size? = null
+    private val outputSize = calculateOutputSize()
 
     override fun getOutputSize(inputSizes: List<Size>): Size {
         require(inputSizes.size == ReactionVideoLayerOrder.compositionOrder.size) {
             "A composição requer as camadas de câmera e vídeo original"
         }
+        return outputSize
+    }
+
+    private fun calculateOutputSize(): Size {
         val longEdge = if (project.outputResolution == OutputResolution.FULL_HD_1080) 1920 else 1280
-        cameraInputSize = inputSizes[ReactionVideoLayerOrder.compositionOrder.indexOf(ReactionVideoLayer.CAMERA)]
         return when (project.outputAspect) {
             OutputAspect.PORTRAIT_9_16 -> Size(longEdge * 9 / 16, longEdge)
             OutputAspect.LANDSCAPE_16_9 -> Size(longEdge, longEdge * 9 / 16)
@@ -54,7 +57,7 @@ class ReactionVideoCompositorSettings(
                 val scale = longEdge.toFloat() / maxOf(sourceDisplaySize.width, sourceDisplaySize.height)
                 Size(even(sourceDisplaySize.width * scale), even(sourceDisplaySize.height * scale))
             }
-        }.also { outputSize = it }
+        }
     }
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
@@ -63,9 +66,7 @@ class ReactionVideoCompositorSettings(
         return when (ReactionVideoLayerOrder.layerForInputId(inputId)) {
             ReactionVideoLayer.CAMERA -> {
                 val transform = segment?.cameraTransform ?: project.cameraTransform
-                val input = checkNotNull(cameraInputSize) { "Tamanho da câmera ainda não configurado" }
-                val output = checkNotNull(outputSize) { "Tamanho da saída ainda não configurado" }
-                val scale = cameraOverlayScale(input, output, transform, segment?.cameraShape ?: project.cameraShape)
+                val scale = cameraScaleAt(presentationTimeUs)
                 StaticOverlaySettings.Builder()
                     .setScale(scale.x, scale.y)
                     .setOverlayFrameAnchor(0f, 0f)
@@ -84,6 +85,17 @@ class ReactionVideoCompositorSettings(
             }
             null -> StaticOverlaySettings.Builder().build()
         }
+    }
+
+    internal fun cameraScaleAt(presentationTimeUs: Long): CameraOverlayScale {
+        val timeNanos = presentationTimeUs * 1_000L
+        val segment = segments.firstOrNull { timeNanos in it.finalStartNanos until it.finalEndNanos }
+        return cameraOverlayScale(
+            cameraInputSize,
+            outputSize,
+            segment?.cameraTransform ?: project.cameraTransform,
+            segment?.cameraShape ?: project.cameraShape,
+        )
     }
 
     private fun even(value: Float): Int = (value.toInt().coerceAtLeast(2) / 2) * 2

@@ -9,6 +9,19 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.2-rc.3 - 2026-11-07
+
+### Corrigido
+
+- Corrigida a falha `IllegalStateException: Tamanho da câmera ainda não configurado` reportada pela `rc.2`.
+- O compositor não depende mais de `getOutputSize` ser chamado antes de `getOverlaySettings`, pois Media3 não garante essa ordem.
+- Dimensões orientadas da câmera e da saída agora são calculadas antes de iniciar o Transformer e permanecem disponíveis desde a primeira solicitação de overlay.
+
+### Qualidade
+
+- Trinta e sete testes unitários aprovados, incluindo regressão que calcula o overlay da câmera antes da solicitação do tamanho de saída.
+- Android Lint, APK debug e APK de testes instrumentados validados localmente.
+
 ## 0.2.2-rc.2 - 2026-11-07
 
 ### Corrigido
