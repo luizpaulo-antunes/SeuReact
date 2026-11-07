@@ -1,0 +1,334 @@
+package com.seureact.app.ui
+
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.seureact.app.AppContainer
+import com.seureact.app.domain.model.CameraShape
+import com.seureact.app.domain.model.CameraFacing
+import com.seureact.app.domain.model.CameraTransform
+import com.seureact.app.domain.model.OutputAspect
+import com.seureact.app.domain.model.OutputResolution
+import com.seureact.app.domain.model.ProjectStatus
+import com.seureact.app.domain.model.ReactionProject
+import com.seureact.app.domain.model.TimelineEvent
+import com.seureact.app.media.capture.CameraCaptureController
+import com.seureact.app.media.capture.SessionClock
+import com.seureact.app.worker.ExportWorker
+import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+enum class AppScreen { HOME, STUDIO, EXPORT }
+
+data class MainUiState(
+    val screen: AppScreen = AppScreen.HOME,
+    val project: ReactionProject? = null,
+    val importing: Boolean = false,
+    val isRecording: Boolean = false,
+    val isPlaying: Boolean = false,
+    val isMuted: Boolean = false,
+    val elapsedNanos: Long = 0,
+    val sourcePositionMs: Long = 0,
+    val message: String? = null,
+    val exportProgress: Int = 0,
+    val exportState: WorkInfo.State? = null,
+)
+
+class MainViewModel(application: Application, private val container: AppContainer) : AndroidViewModel(application) {
+    private val repository = container.projectRepository
+    private val mutableState = MutableStateFlow(MainUiState())
+    val state: StateFlow<MainUiState> = mutableState.asStateFlow()
+    val projects = repository.observeProjects().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val player = ExoPlayer.Builder(application).build()
+    private var clock: SessionClock? = null
+    private var recordingController: CameraCaptureController? = null
+    private var exportAfterFinalize = false
+
+    fun importVideo(uri: Uri) {
+        viewModelScope.launch {
+            mutableState.value = mutableState.value.copy(importing = true, message = null)
+            runCatching { container.sourceImporter.import(uri) }
+                .onSuccess { project ->
+                    repository.createProject(project)
+                    loadInPlayer(project)
+                    mutableState.value = mutableState.value.copy(
+                        screen = AppScreen.STUDIO, project = project, importing = false,
+                    )
+                }
+                .onFailure { error ->
+                    mutableState.value = mutableState.value.copy(importing = false, message = error.message)
+                }
+        }
+    }
+
+    fun openProject(project: ReactionProject) {
+        val destination = when (project.status) {
+            ProjectStatus.PREPARING -> AppScreen.STUDIO
+            ProjectStatus.RECORDING -> AppScreen.STUDIO
+            else -> AppScreen.EXPORT
+        }
+        mutableState.value = mutableState.value.copy(
+            screen = destination,
+            project = project,
+            exportProgress = project.exportProgress,
+            message = project.lastError,
+        )
+        loadInPlayer(project)
+        if (project.status == ProjectStatus.EXPORTING) observeExport(project.id)
+    }
+
+    fun backHome() {
+        if (!mutableState.value.isRecording) {
+            player.pause()
+            mutableState.value = MainUiState()
+        }
+    }
+
+    fun updateSetup(
+        shape: CameraShape? = null,
+        aspect: OutputAspect? = null,
+        resolution: OutputResolution? = null,
+        sourceVolume: Float? = null,
+        microphoneVolume: Float? = null,
+    ) {
+        val current = mutableState.value.project ?: return
+        val updated = current.copy(
+            cameraShape = shape ?: current.cameraShape,
+            outputAspect = aspect ?: current.outputAspect,
+            outputResolution = resolution ?: current.outputResolution,
+            sourceVolume = sourceVolume ?: current.sourceVolume,
+            microphoneVolume = microphoneVolume ?: current.microphoneVolume,
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+        mutableState.value = mutableState.value.copy(project = updated)
+        player.volume = updated.sourceVolume
+        if (mutableState.value.isRecording && sourceVolume != null) {
+            persist(TimelineEvent.SourceVolumeChanged(clock!!.elapsedNanos(), player.currentPosition, sourceVolume))
+        }
+        if (mutableState.value.isRecording && microphoneVolume != null) {
+            persist(TimelineEvent.MicrophoneVolumeChanged(clock!!.elapsedNanos(), player.currentPosition, microphoneVolume))
+        }
+        viewModelScope.launch { repository.updateProject(updated) }
+    }
+
+    fun setCameraFacing(facing: CameraFacing) {
+        val project = mutableState.value.project ?: return
+        val updated = project.copy(
+            cameraFacing = facing,
+            cameraTransform = project.cameraTransform.copy(mirrored = facing == CameraFacing.FRONT),
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+        mutableState.value = mutableState.value.copy(project = updated)
+        viewModelScope.launch { repository.updateProject(updated) }
+    }
+
+    fun startRecording(controller: CameraCaptureController) {
+        val project = mutableState.value.project ?: return
+        if (mutableState.value.isRecording) return
+        val rawFile = File(getApplication<Application>().filesDir, "projects/${project.id}/camera.mp4")
+        recordingController = controller
+        exportAfterFinalize = false
+        controller.start(
+            outputFile = rawFile,
+            onError = { message -> interruptRecording(message) },
+            onStarted = {
+                viewModelScope.launch {
+                    val sessionClock = SessionClock().also { it.start() }
+                    clock = sessionClock
+                    val updated = project.copy(
+                        status = ProjectStatus.RECORDING,
+                        cameraVideoPath = rawFile.absolutePath,
+                        microphoneAudioPath = rawFile.absolutePath,
+                        updatedAtEpochMs = System.currentTimeMillis(),
+                    )
+                    repository.updateProject(updated)
+                    repository.appendEvent(project.id, TimelineEvent.SessionStarted(
+                        sourcePositionMs = player.currentPosition,
+                        sourcePlaying = true,
+                        sourceVolume = updated.sourceVolume,
+                        microphoneVolume = updated.microphoneVolume,
+                        cameraTransform = updated.cameraTransform,
+                        cameraShape = updated.cameraShape,
+                        cameraFacing = updated.cameraFacing,
+                    ))
+                    mutableState.value = mutableState.value.copy(
+                        project = updated, isRecording = true, isPlaying = true, message = null,
+                    )
+                    player.play()
+                }
+            },
+            onFinalized = { finalizeRecording(project.id) },
+        )
+    }
+
+    fun togglePlayback() {
+        if (!mutableState.value.isRecording) return
+        val elapsed = clock?.elapsedNanos() ?: return
+        val position = player.currentPosition
+        val event = if (player.isPlaying) {
+            player.pause()
+            TimelineEvent.SourcePause(elapsed, position)
+        } else {
+            player.play()
+            TimelineEvent.SourcePlay(elapsed, position)
+        }
+        mutableState.value = mutableState.value.copy(isPlaying = player.isPlaying, sourcePositionMs = position)
+        persist(event)
+    }
+
+    fun seekTo(positionMs: Long) {
+        val project = mutableState.value.project ?: return
+        val target = positionMs.coerceIn(0, project.metadata.durationMs)
+        player.seekTo(target)
+        mutableState.value = mutableState.value.copy(sourcePositionMs = target)
+        if (mutableState.value.isRecording) persist(TimelineEvent.SourceSeek(clock!!.elapsedNanos(), target))
+    }
+
+    fun toggleMute() {
+        val muted = !mutableState.value.isMuted
+        player.volume = if (muted) 0f else (mutableState.value.project?.sourceVolume ?: 1f)
+        mutableState.value = mutableState.value.copy(isMuted = muted)
+        if (mutableState.value.isRecording) {
+            persist(TimelineEvent.SourceMuted(clock!!.elapsedNanos(), player.currentPosition, muted))
+        }
+    }
+
+    fun changeTransform(transform: CameraTransform) {
+        val project = mutableState.value.project ?: return
+        val constrained = transform.copy(
+            centerX = transform.centerX.coerceIn(0.12f, 0.88f),
+            centerY = transform.centerY.coerceIn(0.12f, 0.88f),
+            width = transform.width.coerceIn(0.18f, 0.6f),
+            height = transform.height.coerceIn(0.18f, 0.6f),
+        )
+        val updated = project.copy(cameraTransform = constrained)
+        mutableState.value = mutableState.value.copy(project = updated)
+        if (mutableState.value.isRecording) {
+            persist(TimelineEvent.CameraTransformChanged(clock!!.elapsedNanos(), player.currentPosition, constrained))
+        } else {
+            viewModelScope.launch { repository.updateProject(updated) }
+        }
+    }
+
+    fun tick() {
+        val currentClock = clock ?: return
+        val previousWasPlaying = mutableState.value.isPlaying
+        if (previousWasPlaying && player.playbackState == Player.STATE_ENDED) {
+            persist(TimelineEvent.SourcePause(currentClock.elapsedNanos(), player.currentPosition))
+        }
+        mutableState.value = mutableState.value.copy(
+            elapsedNanos = currentClock.elapsedNanos(),
+            sourcePositionMs = player.currentPosition,
+            isPlaying = player.isPlaying,
+        )
+    }
+
+    fun finishRecording() {
+        if (!mutableState.value.isRecording) return
+        player.pause()
+        exportAfterFinalize = true
+        mutableState.value = mutableState.value.copy(isRecording = false, isPlaying = false, message = "Finalizando arquivos brutos…")
+        recordingController?.stop()
+    }
+
+    fun interruptRecording(reason: String = "Sessão interrompida ao sair do aplicativo") {
+        val project = mutableState.value.project ?: return
+        if (!mutableState.value.isRecording) return
+        exportAfterFinalize = false
+        val elapsed = clock?.elapsedNanos() ?: 0L
+        viewModelScope.launch {
+            repository.appendEvent(project.id, TimelineEvent.SessionFinished(elapsed, player.currentPosition))
+            repository.updateStatus(project.id, ProjectStatus.INTERRUPTED, reason)
+            recordingController?.stop()
+            player.pause()
+            mutableState.value = mutableState.value.copy(isRecording = false, isPlaying = false, message = reason)
+        }
+    }
+
+    fun retryExport() {
+        val project = mutableState.value.project ?: return
+        enqueueExport(project.id)
+    }
+
+    fun cancelExport() {
+        val project = mutableState.value.project ?: return
+        WorkManager.getInstance(getApplication()).cancelUniqueWork(workName(project.id))
+    }
+
+    fun clearMessage() {
+        mutableState.value = mutableState.value.copy(message = null)
+    }
+
+    private fun finalizeRecording(projectId: String) {
+        if (!exportAfterFinalize) return
+        exportAfterFinalize = false
+        viewModelScope.launch {
+            val elapsed = clock?.elapsedNanos() ?: return@launch
+            repository.appendEvent(projectId, TimelineEvent.SessionFinished(elapsed, player.currentPosition))
+            repository.updateStatus(projectId, ProjectStatus.READY_TO_EXPORT)
+            val updated = repository.getProject(projectId)?.copy(status = ProjectStatus.READY_TO_EXPORT)
+            mutableState.value = mutableState.value.copy(project = updated, screen = AppScreen.EXPORT, message = null)
+            enqueueExport(projectId)
+        }
+    }
+
+    private fun enqueueExport(projectId: String) {
+        val request = OneTimeWorkRequestBuilder<ExportWorker>()
+            .setInputData(workDataOf(ExportWorker.KEY_PROJECT_ID to projectId))
+            .addTag(workName(projectId))
+            .build()
+        WorkManager.getInstance(getApplication()).enqueueUniqueWork(workName(projectId), ExistingWorkPolicy.REPLACE, request)
+        mutableState.value = mutableState.value.copy(screen = AppScreen.EXPORT, exportProgress = 0, exportState = WorkInfo.State.ENQUEUED)
+        observeExport(projectId)
+    }
+
+    private fun observeExport(projectId: String) {
+        viewModelScope.launch {
+            WorkManager.getInstance(getApplication()).getWorkInfosForUniqueWorkFlow(workName(projectId)).collect { works ->
+                val work = works.firstOrNull() ?: return@collect
+                mutableState.value = mutableState.value.copy(
+                    exportProgress = work.progress.getInt(ExportWorker.KEY_PROGRESS, mutableState.value.exportProgress),
+                    exportState = work.state,
+                    message = work.outputData.getString(ExportWorker.KEY_ERROR) ?: mutableState.value.message,
+                )
+                if (work.state.isFinished) {
+                    repository.getProject(projectId)?.let { completed ->
+                        mutableState.value = mutableState.value.copy(project = completed)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun persist(event: TimelineEvent) {
+        val projectId = mutableState.value.project?.id ?: return
+        viewModelScope.launch { repository.appendEvent(projectId, event) }
+    }
+
+    private fun loadInPlayer(project: ReactionProject) {
+        player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(project.localSourcePath))))
+        player.prepare()
+        player.volume = project.sourceVolume
+    }
+
+    override fun onCleared() {
+        player.release()
+        recordingController?.release()
+    }
+
+    private fun workName(projectId: String) = "export_$projectId"
+}
