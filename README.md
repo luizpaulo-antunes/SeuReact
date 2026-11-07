@@ -81,7 +81,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 - O tempo inicial da sessão é ancorado no evento `VideoRecordEvent.Start`; aparelhos podem introduzir pequena latência interna antes do primeiro sample. Valide sincronia por modelo.
 - Seek depende da precisão do decoder e dos keyframes do arquivo; Transformer decodifica a partir do ponto seguro e recorta por timestamp.
 - O compositor Media3 é uma API marcada como instável; está isolado atrás de `ReactionExporter` para permitir troca por um pipeline MediaCodec/OpenGL próprio.
-- O crop da câmera usa `Presentation` do Media3; a máscara e a composição ainda usam efeitos OpenGL. Valide o pipeline nos aparelhos e GPUs que representam o público-alvo.
+- O crop e a máscara da câmera usam um efeito OpenGL que preserva as dimensões recebidas do decoder, evitando renegociação entre segmentos. Valide o pipeline nos aparelhos e GPUs que representam o público-alvo.
 - Arquivos HDR são tratados pelo comportamento padrão do Transformer; a matriz de validação deve incluir aparelhos e codecs usados pelo público-alvo.
 
 ## Privacidade e arquivos

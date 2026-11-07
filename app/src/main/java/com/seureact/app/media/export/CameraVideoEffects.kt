@@ -2,7 +2,6 @@ package com.seureact.app.media.export
 
 import androidx.media3.common.Effect
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.effect.Presentation
 import com.seureact.app.domain.model.CameraShape
 
 internal fun cameraCropAspectRatio(shape: CameraShape): Float = when (shape) {
@@ -11,10 +10,4 @@ internal fun cameraCropAspectRatio(shape: CameraShape): Float = when (shape) {
 }
 
 @UnstableApi
-internal fun cameraVideoEffects(shape: CameraShape): List<Effect> = listOf(
-    Presentation.createForAspectRatio(
-        cameraCropAspectRatio(shape),
-        Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
-    ),
-    CameraMaskEffect(shape),
-)
+internal fun cameraVideoEffects(shape: CameraShape): List<Effect> = listOf(CameraMaskEffect(shape))

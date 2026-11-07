@@ -1,10 +1,8 @@
 package com.seureact.app.media.export
 
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.effect.Presentation
 import com.seureact.app.domain.model.CameraShape
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @UnstableApi
@@ -17,12 +15,11 @@ class CameraVideoEffectsTest {
     }
 
     @Test
-    fun `official presentation crop runs before custom mask`() {
+    fun `camera pipeline keeps a single dimension preserving effect`() {
         CameraShape.entries.forEach { shape ->
             val effects = cameraVideoEffects(shape)
-            assertEquals(2, effects.size)
-            assertTrue(effects[0] is Presentation)
-            assertTrue(effects[1] is CameraMaskEffect)
+            assertEquals(1, effects.size)
+            assertEquals(CameraMaskEffect::class, effects.single()::class)
         }
     }
 }

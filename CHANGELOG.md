@@ -9,6 +9,20 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.2-rc.2 - 2026-11-07
+
+### Corrigido
+
+- Removido `Presentation` da sequência da câmera após a validação física mostrar que a mudança de geometria ainda causava `ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED`.
+- O frame da câmera mantém as mesmas dimensões do decoder durante todo o pipeline; o crop central `1:1` ou `4:3` ocorre apenas nas coordenadas de textura do shader.
+- A máscara e o crop passam pelo mesmo efeito OpenGL, evitando renegociação de tamanho entre segmentos e mantendo círculo, quadrado e retângulo sem esticar a imagem.
+- Mensagens de falha agora incluem a causa técnica OpenGL/codec mais profunda em uma única linha para diagnóstico no aparelho.
+
+### Qualidade
+
+- Trinta e seis testes unitários aprovados, incluindo crop de câmeras verticais e horizontais sem alteração das dimensões do frame.
+- Android Lint, APK debug e APK de testes instrumentados validados localmente.
+
 ## 0.2.2-rc.1 - 2026-11-07
 
 ### Corrigido

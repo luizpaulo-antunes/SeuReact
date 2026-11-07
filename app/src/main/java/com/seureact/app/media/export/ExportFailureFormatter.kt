@@ -13,8 +13,29 @@ object ExportFailureFormatter {
             return error.message?.takeIf { it.isNotBlank() } ?: "Falha inesperada na exportação"
         }
         val technicalCode = exportError.getErrorCodeName()
-        return "${messageForCode(exportError.errorCode)} ($technicalCode). Os arquivos brutos foram preservados."
+        val detail = deepestTechnicalDetail(error)
+        return buildString {
+            append(messageForCode(exportError.errorCode))
+            append(" ($technicalCode)")
+            if (detail != null) append(". Detalhe: $detail")
+            append(". Os arquivos brutos foram preservados.")
+        }
     }
+
+    internal fun deepestTechnicalDetail(error: Throwable): String? =
+        generateSequence(error as Throwable?) { it.cause }
+            .toList()
+            .asReversed()
+            .firstOrNull { it !is ExportException }
+            ?.let { cause ->
+                val message = cause.message
+                    ?.replace(Regex("\\s+"), " ")
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                listOfNotNull(cause::class.java.simpleName.takeIf(String::isNotEmpty), message)
+                    .joinToString(": ")
+                    .take(180)
+            }
 
     internal fun messageForCode(errorCode: Int): String = when (errorCode) {
         ExportException.ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED ->

@@ -26,6 +26,16 @@ internal class CameraMaskEffect(private val shape: CameraShape) : GlEffect {
     }
 
     internal fun outputSize(inputWidth: Int, inputHeight: Int) = Size(inputWidth, inputHeight)
+
+    internal fun cropScale(inputWidth: Int, inputHeight: Int): FloatArray {
+        val inputAspectRatio = inputWidth.toFloat() / inputHeight
+        val targetAspectRatio = cameraCropAspectRatio(shape)
+        return if (inputAspectRatio > targetAspectRatio) {
+            floatArrayOf(targetAspectRatio / inputAspectRatio, 1f)
+        } else {
+            floatArrayOf(1f, inputAspectRatio / targetAspectRatio)
+        }
+    }
 }
 
 @UnstableApi
@@ -51,7 +61,10 @@ private class CameraMaskShaderProgram(
         glProgram.setIntUniform("uShape", effect.shapeUniform)
     }
 
-    override fun configure(inputWidth: Int, inputHeight: Int) = effect.outputSize(inputWidth, inputHeight)
+    override fun configure(inputWidth: Int, inputHeight: Int): Size {
+        glProgram.setFloatsUniform("uCropScale", effect.cropScale(inputWidth, inputHeight))
+        return effect.outputSize(inputWidth, inputHeight)
+    }
 
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         try {

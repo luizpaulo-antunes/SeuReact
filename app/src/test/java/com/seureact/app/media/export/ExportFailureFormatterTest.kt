@@ -23,4 +23,13 @@ class ExportFailureFormatterTest {
 
         assertTrue(setOf(decoder, encoder, audio, muxer).size == 4)
     }
+
+    @Test
+    fun `deepest cause is reduced to a short single line detail`() {
+        val error = IllegalStateException("wrapper", IllegalArgumentException("GPU\nrejeitou o frame"))
+
+        val detail = ExportFailureFormatter.deepestTechnicalDetail(error)
+
+        assertTrue(detail == "IllegalArgumentException: GPU rejeitou o frame")
+    }
 }
