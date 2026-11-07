@@ -10,6 +10,19 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.1.2 - 2026-11-07
+
+### Corrigido
+
+- Exportação não falha mais ao preparar a matriz de áudio `7 → 2` do Media3.
+- Downmix multicanal agora possui fallback estéreo próprio com potência normalizada.
+- Canais centrais, LFE e surround são preservados no fallback sem exceder a potência de saída.
+
+### Qualidade
+
+- Três testes de regressão para matriz de sete canais, normalização e canal surround central.
+- Treze testes unitários, Android Lint e APK debug validados localmente.
+
 ## 0.1.1 - 2026-11-07
 
 ### Corrigido

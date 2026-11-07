@@ -13,7 +13,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
-import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.ToInt16PcmAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
@@ -130,7 +129,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
     private fun volumeEffects(volume: Float): Effects {
         val channelMixer = ChannelMixingAudioProcessor().apply {
             (1..8).forEach { inputChannels ->
-                putChannelMixingMatrix(ChannelMixingMatrix.createForConstantPower(inputChannels, OUTPUT_CHANNELS))
+                putChannelMixingMatrix(StereoChannelMixingMatrixFactory.create(inputChannels))
             }
         }
         val processors: List<AudioProcessor> = listOf(
@@ -202,6 +201,5 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
 
     private companion object {
         const val MIX_HEADROOM = 0.7f
-        const val OUTPUT_CHANNELS = 2
     }
 }
