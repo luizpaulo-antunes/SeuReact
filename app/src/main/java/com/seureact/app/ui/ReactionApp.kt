@@ -9,11 +9,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,30 +31,47 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -59,6 +79,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +94,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -81,6 +104,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -137,52 +162,406 @@ private fun HomeScreen(
     onOpen: (ReactionProject) -> Unit,
 ) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onImport) }
-    Scaffold { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Spacer(Modifier.height(24.dp))
-                Text("Seu React", style = MaterialTheme.typography.headlineLarge)
-                Text("Grave o que você realmente achou.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    enabled = !state.importing,
-                    onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
-                ) {
-                    if (state.importing) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else Text("Novo react")
+    val resumableProject = projects.firstOrNull {
+        it.status == ProjectStatus.PREPARING ||
+            it.status == ProjectStatus.INTERRUPTED ||
+            it.status == ProjectStatus.READY_TO_EXPORT ||
+            it.status == ProjectStatus.FAILED
+    }
+    val launchPicker = {
+        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+    }
+    Box(
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(MaterialTheme.colorScheme.background, Color(0xFF11111A)),
+            ),
+        ),
+    ) {
+        Scaffold(containerColor = Color.Transparent) { padding ->
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(148.dp),
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    HomeHero(importing = state.importing, onNewReaction = launchPicker)
                 }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Headphones, null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Use fones para evitar eco na gravação.", style = MaterialTheme.typography.bodySmall)
+                resumableProject?.let { project ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column {
+                            Spacer(Modifier.height(10.dp))
+                            SectionEyebrow("CONTINUE CRIANDO")
+                            Spacer(Modifier.height(8.dp))
+                            ResumeProjectCard(project = project, onClick = { onOpen(project) })
+                        }
+                    }
                 }
-                Spacer(Modifier.height(24.dp))
-                Text("Projetos", style = MaterialTheme.typography.titleLarge)
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    GallerySectionHeader(projectCount = projects.size)
+                }
+                if (projects.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyGallery()
+                    }
+                } else {
+                    items(projects, key = { it.id }) { project ->
+                        ProjectGalleryCard(project = project, onClick = { onOpen(project) })
+                    }
+                }
             }
-            if (projects.isEmpty()) item { Text("Seus projetos aparecerão aqui.") }
-            items(projects, key = { it.id }) { project -> ProjectCard(project) { onOpen(project) } }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
-private fun ProjectCard(project: ReactionProject, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(project.metadata.displayName, style = MaterialTheme.typography.titleMedium)
-            Text(statusLabel(project.status), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (project.status == ProjectStatus.EXPORTING) {
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator({ project.exportProgress / 100f }, Modifier.fillMaxWidth())
+private fun HomeHero(importing: Boolean, onNewReaction: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(
+            Brush.linearGradient(
+                listOf(Color(0xFFFF5C7A), Color(0xFFB73A87), Color(0xFF5344A2)),
+            ),
+        ),
+    ) {
+        Box(
+            Modifier.align(Alignment.TopEnd).offset(x = 48.dp, y = (-54).dp).size(180.dp)
+                .background(Color.White.copy(alpha = 0.08f), CircleShape),
+        )
+        Box(
+            Modifier.align(Alignment.BottomEnd).offset(x = 32.dp, y = 52.dp).size(120.dp)
+                .background(Color.Black.copy(alpha = 0.08f), CircleShape),
+        )
+        Column(Modifier.padding(24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = Color.White.copy(alpha = 0.16f),
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                ) {
+                    Icon(Icons.Default.Videocam, null, Modifier.padding(8.dp).size(18.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "SEUREACT",
+                    color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Spacer(Modifier.height(22.dp))
+            Text(
+                "Sua reação,\ndo seu jeito.",
+                color = Color.White,
+                style = MaterialTheme.typography.headlineLarge,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Escolha um vídeo, comente e transforme tudo em um único react.",
+                color = Color.White.copy(alpha = 0.84f),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.fillMaxWidth(0.88f),
+            )
+            Spacer(Modifier.height(22.dp))
+            Button(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = !importing,
+                onClick = onNewReaction,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF35101F),
+                    disabledContainerColor = Color.White.copy(alpha = 0.7f),
+                    disabledContentColor = Color(0xFF35101F).copy(alpha = 0.7f),
+                ),
+            ) {
+                if (importing) {
+                    CircularProgressIndicator(Modifier.size(22.dp), color = Color(0xFF35101F), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Importando vídeo…")
+                } else {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Criar novo react")
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Headphones, null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    "Fones de ouvido evitam eco na gravação",
+                    color = Color.White.copy(alpha = 0.76f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
+}
+
+@Composable
+private fun SectionEyebrow(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Bold,
+    )
+}
+
+@Composable
+private fun ResumeProjectCard(project: ReactionProject, onClick: () -> Unit) {
+    val accent = projectStatusAccent(project.status)
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                color = accent.copy(alpha = 0.16f),
+                contentColor = accent,
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(projectStatusIcon(project.status), null, Modifier.padding(12.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    project.metadata.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    statusLabel(project.status),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                "Abrir projeto",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GallerySectionHeader(projectCount: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Sua galeria", style = MaterialTheme.typography.titleLarge)
+            Text(
+                if (projectCount == 0) "Seus reacts vão aparecer aqui" else "Projetos recentes e exportados",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (projectCount > 0) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = CircleShape,
+            ) {
+                Text(
+                    projectCount.toString(),
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyGallery() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                modifier = Modifier.size(64.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = CircleShape,
+            ) {
+                Icon(Icons.Default.VideoLibrary, null, Modifier.padding(17.dp))
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Sua primeira reação começa aqui", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "Use o botão acima para escolher um vídeo do celular.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectGalleryCard(project: ReactionProject, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column {
+            ProjectArtwork(project)
+            Column(Modifier.padding(12.dp)) {
+                Text(
+                    project.metadata.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(7.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.AccessTime,
+                        null,
+                        Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "${formatTime(project.metadata.durationMs)}  •  ${sourceOrientationLabel(project)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectArtwork(project: ReactionProject) {
+    val palettes = listOf(
+        listOf(Color(0xFF64304C), Color(0xFF2D274E)),
+        listOf(Color(0xFF1D5B57), Color(0xFF17334E)),
+        listOf(Color(0xFF5B3D25), Color(0xFF3E254C)),
+        listOf(Color(0xFF3D466E), Color(0xFF39263F)),
+    )
+    val palette = palettes[Math.floorMod(project.id.hashCode(), palettes.size)]
+    val isPortrait = project.metadata.height > project.metadata.width
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(1.35f).background(Brush.linearGradient(palette)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.align(Alignment.TopEnd).offset(x = 24.dp, y = (-22).dp).size(90.dp)
+                .background(Color.White.copy(alpha = 0.06f), CircleShape),
+        )
+        Box(
+            Modifier
+                .size(width = if (isPortrait) 42.dp else 72.dp, height = if (isPortrait) 68.dp else 44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.Black.copy(alpha = 0.22f))
+                .border(1.dp, Color.White.copy(alpha = 0.34f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(28.dp))
+        }
+        Box(Modifier.align(Alignment.TopStart).padding(9.dp)) {
+            ProjectStatusBadge(project.status)
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(9.dp),
+            color = Color.Black.copy(alpha = 0.52f),
+            contentColor = Color.White,
+            shape = CircleShape,
+        ) {
+            Text(
+                formatTime(project.metadata.durationMs),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (project.status == ProjectStatus.EXPORTING) {
+            LinearProgressIndicator(
+                progress = { project.exportProgress / 100f },
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Color.Transparent,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectStatusBadge(status: ProjectStatus) {
+    val accent = projectStatusAccent(status)
+    Surface(
+        color = Color.Black.copy(alpha = 0.42f),
+        contentColor = Color.White,
+        shape = CircleShape,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(projectStatusIcon(status), null, Modifier.size(12.dp), tint = accent)
+            Spacer(Modifier.width(4.dp))
+            Text(shortStatusLabel(status), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun projectStatusAccent(status: ProjectStatus): Color = when (status) {
+    ProjectStatus.RECORDING -> MaterialTheme.colorScheme.primary
+    ProjectStatus.READY_TO_EXPORT, ProjectStatus.COMPLETED -> MaterialTheme.colorScheme.secondary
+    ProjectStatus.FAILED -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.tertiary
+}
+
+private fun projectStatusIcon(status: ProjectStatus) = when (status) {
+    ProjectStatus.PREPARING -> Icons.Default.Tune
+    ProjectStatus.RECORDING -> Icons.Default.FiberManualRecord
+    ProjectStatus.INTERRUPTED -> Icons.Default.Restore
+    ProjectStatus.READY_TO_EXPORT -> Icons.Default.Movie
+    ProjectStatus.EXPORTING -> Icons.Default.Refresh
+    ProjectStatus.COMPLETED -> Icons.Default.CheckCircle
+    ProjectStatus.FAILED -> Icons.Default.ErrorOutline
+}
+
+private fun shortStatusLabel(status: ProjectStatus) = when (status) {
+    ProjectStatus.PREPARING -> "Preparando"
+    ProjectStatus.RECORDING -> "Gravando"
+    ProjectStatus.INTERRUPTED -> "Pausado"
+    ProjectStatus.READY_TO_EXPORT -> "Pronto"
+    ProjectStatus.EXPORTING -> "Exportando"
+    ProjectStatus.COMPLETED -> "Concluído"
+    ProjectStatus.FAILED -> "Falhou"
+}
+
+private fun sourceOrientationLabel(project: ReactionProject) = when {
+    project.metadata.width > project.metadata.height -> "Horizontal"
+    project.metadata.height > project.metadata.width -> "Vertical"
+    else -> "Quadrado"
 }
 
 @Composable
@@ -230,23 +609,52 @@ private fun StudioScreen(
 
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    enabled = !state.isRecording && !state.isFinalizing,
-                    onClick = viewModel::backHome,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
-                Text(
-                    when {
-                        state.isRecording -> "Gravando reação"
-                        state.isDiscarding -> "Descartando gravação"
-                        state.isFinalizing -> "Finalizando gravação"
-                        else -> "Preparar reação"
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Spacer(Modifier.weight(1f))
-                if (state.isRecording) Text("● REC", color = MaterialTheme.colorScheme.primary)
+            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+                Row(
+                    Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        enabled = !state.isRecording && !state.isFinalizing,
+                        onClick = viewModel::backHome,
+                    ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when {
+                                state.isRecording -> "Gravando reação"
+                                state.isDiscarding -> "Descartando gravação"
+                                state.isFinalizing -> "Finalizando gravação"
+                                else -> "Preparar reação"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            project.metadata.displayName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (state.isRecording) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            shape = CircleShape,
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.FiberManualRecord, null, Modifier.size(13.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text("REC", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             Box(
                 Modifier.fillMaxWidth().weight(1f).background(androidx.compose.ui.graphics.Color.Black),
                 contentAlignment = Alignment.Center,
@@ -470,32 +878,75 @@ private fun CameraOverlay(
 @Composable
 private fun PreparationControls(project: ReactionProject, viewModel: MainViewModel, onStart: () -> Unit) {
     LazyColumn(
-        modifier = Modifier.fillMaxWidth().height(300.dp).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth().height(320.dp).clip(
+            RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        ).background(MaterialTheme.colorScheme.surfaceContainerLow),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Monte seu enquadramento", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Ajuste a câmera antes de começar",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = CircleShape,
+                ) {
+                    Icon(Icons.Default.Videocam, null, Modifier.padding(9.dp).size(18.dp))
+                }
+            }
+        }
         item { ChoiceRow("Formato da câmera", CameraShape.entries, project.cameraShape, ::cameraShapeLabel) { viewModel.updateSetup(shape = it) } }
         item {
-            Button(onClick = {
-                viewModel.setCameraFacing(if (project.cameraFacing == CameraFacing.FRONT) CameraFacing.BACK else CameraFacing.FRONT)
-            }) { Text(if (project.cameraFacing == CameraFacing.FRONT) "Usar câmera traseira" else "Usar câmera frontal") }
+            OutlinedButton(
+                onClick = {
+                    viewModel.setCameraFacing(if (project.cameraFacing == CameraFacing.FRONT) CameraFacing.BACK else CameraFacing.FRONT)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Videocam, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (project.cameraFacing == CameraFacing.FRONT) "Trocar para câmera traseira" else "Trocar para câmera frontal")
+            }
         }
         item { ChoiceRow("Proporção", OutputAspect.entries, project.outputAspect, { aspectLabel(it) }) { viewModel.updateSetup(aspect = it) } }
         item { ChoiceRow("Qualidade", OutputResolution.entries, project.outputResolution, { if (it == OutputResolution.HD_720) "720p" else "1080p" }) { viewModel.updateSetup(resolution = it) } }
         item {
-            Text("Volume do vídeo ${percent(project.sourceVolume)}")
-            Slider(project.sourceVolume, { viewModel.updateSetup(sourceVolume = it) }, valueRange = 0f..1f)
-            Text("Volume do microfone ${percent(project.microphoneVolume)}")
-            Slider(project.microphoneVolume, { viewModel.updateSetup(microphoneVolume = it) }, valueRange = 0f..1.5f)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Text("Volume do vídeo ${percent(project.sourceVolume)}", style = MaterialTheme.typography.labelLarge)
+                    Slider(project.sourceVolume, { viewModel.updateSetup(sourceVolume = it) }, valueRange = 0f..1f)
+                    Text("Volume do microfone ${percent(project.microphoneVolume)}", style = MaterialTheme.typography.labelLarge)
+                    Slider(project.microphoneVolume, { viewModel.updateSetup(microphoneVolume = it) }, valueRange = 0f..1.5f)
+                }
+            }
         }
-        item { Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(54.dp)) { Icon(Icons.Default.Mic, null); Spacer(Modifier.width(8.dp)); Text("Começar a gravar") } }
+        item {
+            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Icon(Icons.Default.Mic, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Começar a gravar")
+            }
+        }
     }
 }
 
 @Composable
 private fun <T> ChoiceRow(title: String, values: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     Column {
-        Text(title, style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(3.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             values.forEach { value -> FilterChip(selected == value, { onSelect(value) }, { Text(label(value)) }) }
         }
     }
@@ -655,47 +1106,148 @@ private fun ExportScreen(state: MainUiState, viewModel: MainViewModel) {
     val completed = state.exportState == WorkInfo.State.SUCCEEDED || project?.status == ProjectStatus.COMPLETED
     val exporting = state.exportState == WorkInfo.State.ENQUEUED || state.exportState == WorkInfo.State.RUNNING ||
         state.exportState == WorkInfo.State.BLOCKED || project?.status == ProjectStatus.EXPORTING
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    val accent = when {
+        completed -> MaterialTheme.colorScheme.secondary
+        exporting -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.error
+    }
+    val title = when {
+        completed -> "Sua reação está pronta"
+        exporting -> "Criando seu vídeo"
+        else -> "Não foi possível exportar"
+    }
+    val subtitle = when {
+        completed -> "O MP4 foi salvo em Filmes/SeuReact."
+        exporting -> "Você pode sair desta tela enquanto finalizamos tudo."
+        else -> "Nada foi perdido. Os arquivos brutos continuam salvos."
+    }
+    Box(
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow),
+            ),
+        ).statusBarsPadding().navigationBarsPadding(),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(if (completed) "Reação pronta" else "Exportando reação", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(16.dp))
-        if (exporting) {
-            LinearProgressIndicator({ state.exportProgress / 100f }, Modifier.fillMaxWidth())
+        Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                modifier = Modifier.size(78.dp),
+                color = accent.copy(alpha = 0.14f),
+                contentColor = accent,
+                shape = CircleShape,
+            ) {
+                Icon(
+                    when {
+                        completed -> Icons.Default.CheckCircle
+                        exporting -> Icons.Default.Refresh
+                        else -> Icons.Default.ErrorOutline
+                    },
+                    null,
+                    Modifier.padding(20.dp),
+                )
+            }
+            Spacer(Modifier.height(22.dp))
+            Text(title, style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(8.dp))
-            Text("${state.exportProgress}% — você pode sair desta tela.")
-            Spacer(Modifier.height(24.dp))
-            TextButton(onClick = viewModel::cancelExport) { Text("Cancelar exportação") }
-        } else if (completed) {
-            Text("O MP4 foi salvo em Filmes/SeuReact.")
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = {
-                project?.outputUri?.let { uri ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri.toUri(), "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(26.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(26.dp),
+                tonalElevation = 2.dp,
+            ) {
+                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (exporting) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Exportando", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Text(
+                                "${state.exportProgress}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        LinearProgressIndicator(
+                            progress = { state.exportProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        TextButton(onClick = viewModel::cancelExport) { Text("Cancelar exportação") }
+                    } else if (completed) {
+                        Button(
+                            onClick = {
+                                project?.outputUri?.let { uri ->
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW).setDataAndType(uri.toUri(), "video/mp4")
+                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Assistir agora")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                project?.outputUri?.let { uri ->
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).setType("video/mp4")
+                                                .putExtra(Intent.EXTRA_STREAM, uri.toUri())
+                                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                                            "Compartilhar reação",
+                                        ),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                        ) {
+                            Icon(Icons.Default.Share, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Compartilhar")
+                        }
+                    } else {
+                        Text(
+                            "Você pode tentar novamente sem regravar sua reação.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = viewModel::retryExport,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                        ) {
+                            Icon(Icons.Default.Refresh, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Tentar novamente")
+                        }
+                    }
                 }
-            }) { Icon(Icons.Default.PlayArrow, null); Text(" Assistir") }
-            TextButton(onClick = {
-                project?.outputUri?.let { uri ->
-                    context.startActivity(Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, uri.toUri()).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-                        "Compartilhar reação",
-                    ))
+            }
+            state.message?.let {
+                Spacer(Modifier.height(14.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.42f),
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(it, modifier = Modifier.fillMaxWidth().padding(14.dp), style = MaterialTheme.typography.bodySmall)
                 }
-            }) { Icon(Icons.Default.Share, null); Text(" Compartilhar") }
-        } else {
-            Text("Os arquivos brutos estão preservados e prontos para uma nova tentativa.")
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = viewModel::retryExport) { Text("Exportar agora") }
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = viewModel::backHome) { Text("Voltar para a galeria") }
         }
-        state.message?.let {
-            Spacer(Modifier.height(16.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = viewModel::retryExport) { Text("Tentar novamente") }
-        }
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = viewModel::backHome) { Text("Voltar aos projetos") }
     }
 }
 

@@ -9,6 +9,26 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.2-rc.5 - 2026-11-07
+
+### Interface
+
+- Home redesenhada como uma galeria responsiva, com cards visuais em duas colunas, duração, orientação e estado de cada projeto.
+- Novo destaque para retomar projetos incompletos, falhos ou prontos para exportar sem procurar na galeria.
+- Ação `Criar novo react` ganhou hierarquia principal e orientação sobre o uso de fones integrada ao cabeçalho.
+- Estúdio recebeu cabeçalho compacto com nome do vídeo e indicador `REC` mais legível.
+- Preparação e exportação foram reorganizadas em superfícies claras, com estados, progresso e próximas ações visualmente separados.
+- Paleta, tipografia, cantos e espaçamentos foram unificados em um tema Material 3 próprio do SeuReact.
+
+### Escopo
+
+- Esta candidata altera apenas a apresentação em Jetpack Compose; captura, timeline, composição, áudio e exportação permanecem idênticos à `rc.4`.
+
+### Qualidade
+
+- Trinta e nove testes unitários aprovados.
+- Android Lint, APK debug e APK de testes instrumentados validados localmente.
+
 ## 0.2.2-rc.4 - 2026-11-07
 
 ### Corrigido

@@ -10,7 +10,7 @@ Aplicativo Android nativo, offline, para gravar uma reação contínua enquanto 
 
 ## Arquitetura
 
-- `ui`: Compose + Material 3, estado MVVM e controles da sessão.
+- `ui`: Compose + Material 3, tema próprio, galeria responsiva, estado MVVM e controles da sessão.
 - `domain`: projetos, eventos monotônicos e `TimelineCompiler` puro.
 - `data`: Room, persistência incremental e recuperação de gravações interrompidas.
 - `media/importer`: cópia privada e validação de trilhas com `MediaExtractor`.
