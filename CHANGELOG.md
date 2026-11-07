@@ -10,6 +10,19 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.1.3 - 2026-11-07
+
+### Corrigido
+
+- A câmera gravada agora é desenhada acima do vídeo original no MP4 exportado.
+- Ordem das entradas do Media3 alinhada à composição reversa do `DefaultVideoCompositor`.
+- Resolução na proporção original passa a usar os metadados da fonte, independentemente da entrada primária.
+
+### Qualidade
+
+- Dois testes de regressão garantem a ordem câmera-frente e vídeo-fundo.
+- Quinze testes unitários, Android Lint e APK debug validados localmente.
+
 ## 0.1.2 - 2026-11-07
 
 ### Corrigido

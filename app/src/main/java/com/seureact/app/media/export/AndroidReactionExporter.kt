@@ -98,7 +98,11 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
         }
         val sourceSequence = EditedMediaItemSequence.withAudioAndVideoFrom(sourceItems)
         val cameraSequence = EditedMediaItemSequence.withAudioAndVideoFrom(cameraItems)
-        return Composition.Builder(listOf(sourceSequence, cameraSequence))
+        val sequences = mapOf(
+            ReactionVideoLayer.CAMERA to cameraSequence,
+            ReactionVideoLayer.SOURCE to sourceSequence,
+        )
+        return Composition.Builder(ReactionVideoLayerOrder.compositionOrder.map(sequences::getValue))
             .setVideoCompositorSettings(ReactionVideoCompositorSettings(project, segments))
             .build()
     }

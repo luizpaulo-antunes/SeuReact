@@ -16,21 +16,25 @@ class ReactionVideoCompositorSettings(
     private val segments: List<RenderSegment>,
 ) : VideoCompositorSettings {
     override fun getOutputSize(inputSizes: List<Size>): Size {
+        require(inputSizes.size == ReactionVideoLayerOrder.compositionOrder.size) {
+            "A composição requer as camadas de câmera e vídeo original"
+        }
         val longEdge = if (project.outputResolution == OutputResolution.FULL_HD_1080) 1920 else 1280
         return when (project.outputAspect) {
             OutputAspect.PORTRAIT_9_16 -> Size(longEdge * 9 / 16, longEdge)
             OutputAspect.LANDSCAPE_16_9 -> Size(longEdge, longEdge * 9 / 16)
             OutputAspect.SQUARE -> Size(if (longEdge == 1920) 1080 else 720, if (longEdge == 1920) 1080 else 720)
             OutputAspect.ORIGINAL -> {
-                val source = inputSizes.first()
-                val scale = longEdge.toFloat() / maxOf(source.width, source.height)
-                Size(even(source.width * scale), even(source.height * scale))
+                val scale = longEdge.toFloat() / maxOf(project.metadata.width, project.metadata.height)
+                Size(even(project.metadata.width * scale), even(project.metadata.height * scale))
             }
         }
     }
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
-        if (inputId == 0) return StaticOverlaySettings.Builder().build()
+        if (ReactionVideoLayerOrder.layerForInputId(inputId) != ReactionVideoLayer.CAMERA) {
+            return StaticOverlaySettings.Builder().build()
+        }
         val timeNanos = presentationTimeUs * 1_000L
         val transform = segments.firstOrNull { timeNanos in it.finalStartNanos until it.finalEndNanos }
             ?.cameraTransform ?: project.cameraTransform
