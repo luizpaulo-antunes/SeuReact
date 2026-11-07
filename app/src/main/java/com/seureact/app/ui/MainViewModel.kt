@@ -21,10 +21,13 @@ import com.seureact.app.domain.model.OutputResolution
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.TimelineEvent
+import com.seureact.app.domain.session.RecordingFinalizationPolicy
 import com.seureact.app.media.capture.CameraCaptureController
 import com.seureact.app.media.capture.SessionClock
 import com.seureact.app.worker.ExportWorker
 import java.io.File
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +42,7 @@ data class MainUiState(
     val project: ReactionProject? = null,
     val importing: Boolean = false,
     val isRecording: Boolean = false,
+    val isFinalizing: Boolean = false,
     val isPlaying: Boolean = false,
     val isMuted: Boolean = false,
     val elapsedNanos: Long = 0,
@@ -57,6 +61,9 @@ class MainViewModel(application: Application, private val container: AppContaine
     private var clock: SessionClock? = null
     private var recordingController: CameraCaptureController? = null
     private var exportAfterFinalize = false
+    private var activeRecordingProjectId: String? = null
+    private var interruptionReason: String? = null
+    private var finalizationTimeout: Job? = null
 
     fun importVideo(uri: Uri) {
         viewModelScope.launch {
@@ -92,7 +99,7 @@ class MainViewModel(application: Application, private val container: AppContaine
     }
 
     fun backHome() {
-        if (!mutableState.value.isRecording) {
+        if (!mutableState.value.isRecording && !mutableState.value.isFinalizing) {
             player.pause()
             mutableState.value = MainUiState()
         }
@@ -138,13 +145,15 @@ class MainViewModel(application: Application, private val container: AppContaine
 
     fun startRecording(controller: CameraCaptureController) {
         val project = mutableState.value.project ?: return
-        if (mutableState.value.isRecording) return
+        if (mutableState.value.isRecording || mutableState.value.isFinalizing || activeRecordingProjectId != null) return
         val rawFile = File(getApplication<Application>().filesDir, "projects/${project.id}/camera.mp4")
         recordingController = controller
         exportAfterFinalize = false
-        controller.start(
+        activeRecordingProjectId = project.id
+        interruptionReason = null
+        runCatching { controller.start(
             outputFile = rawFile,
-            onError = { message -> interruptRecording(message) },
+            onError = { message -> completeRecording(project.id, message) },
             onStarted = {
                 viewModelScope.launch {
                     val sessionClock = SessionClock().also { it.start() }
@@ -171,8 +180,10 @@ class MainViewModel(application: Application, private val container: AppContaine
                     player.play()
                 }
             },
-            onFinalized = { finalizeRecording(project.id) },
-        )
+            onFinalized = { completeRecording(project.id, null) },
+        ) }.onFailure { error ->
+            completeRecording(project.id, error.message ?: "Não foi possível iniciar a câmera.")
+        }
     }
 
     fun togglePlayback() {
@@ -241,22 +252,31 @@ class MainViewModel(application: Application, private val container: AppContaine
         if (!mutableState.value.isRecording) return
         player.pause()
         exportAfterFinalize = true
-        mutableState.value = mutableState.value.copy(isRecording = false, isPlaying = false, message = "Finalizando arquivos brutos…")
+        interruptionReason = null
+        mutableState.value = mutableState.value.copy(
+            isRecording = false,
+            isFinalizing = true,
+            isPlaying = false,
+            message = null,
+        )
         recordingController?.stop()
+        scheduleFinalizationTimeout(mutableState.value.project?.id ?: return)
     }
 
     fun interruptRecording(reason: String = "Sessão interrompida ao sair do aplicativo") {
         val project = mutableState.value.project ?: return
         if (!mutableState.value.isRecording) return
         exportAfterFinalize = false
-        val elapsed = clock?.elapsedNanos() ?: 0L
-        viewModelScope.launch {
-            repository.appendEvent(project.id, TimelineEvent.SessionFinished(elapsed, player.currentPosition))
-            repository.updateStatus(project.id, ProjectStatus.INTERRUPTED, reason)
-            recordingController?.stop()
-            player.pause()
-            mutableState.value = mutableState.value.copy(isRecording = false, isPlaying = false, message = reason)
-        }
+        interruptionReason = reason
+        recordingController?.stop()
+        player.pause()
+        mutableState.value = mutableState.value.copy(
+            isRecording = false,
+            isFinalizing = true,
+            isPlaying = false,
+            message = null,
+        )
+        scheduleFinalizationTimeout(project.id)
     }
 
     fun retryExport() {
@@ -273,16 +293,37 @@ class MainViewModel(application: Application, private val container: AppContaine
         mutableState.value = mutableState.value.copy(message = null)
     }
 
-    private fun finalizeRecording(projectId: String) {
-        if (!exportAfterFinalize) return
+    private fun completeRecording(projectId: String, captureError: String?) {
+        if (activeRecordingProjectId != projectId) return
+        activeRecordingProjectId = null
+        player.pause()
+        finalizationTimeout?.cancel()
+        finalizationTimeout = null
+        val decision = RecordingFinalizationPolicy.decide(exportAfterFinalize, captureError, interruptionReason)
         exportAfterFinalize = false
+        interruptionReason = null
         viewModelScope.launch {
-            val elapsed = clock?.elapsedNanos() ?: return@launch
+            val elapsed = clock?.elapsedNanos() ?: 0L
             repository.appendEvent(projectId, TimelineEvent.SessionFinished(elapsed, player.currentPosition))
-            repository.updateStatus(projectId, ProjectStatus.READY_TO_EXPORT)
-            val updated = repository.getProject(projectId)?.copy(status = ProjectStatus.READY_TO_EXPORT)
-            mutableState.value = mutableState.value.copy(project = updated, screen = AppScreen.EXPORT, message = null)
-            enqueueExport(projectId)
+            repository.updateStatus(projectId, decision.status, decision.error)
+            val updated = repository.getProject(projectId)
+            mutableState.value = mutableState.value.copy(
+                project = updated,
+                isRecording = false,
+                isFinalizing = false,
+                isPlaying = false,
+                screen = if (decision.shouldExport) AppScreen.EXPORT else AppScreen.STUDIO,
+                message = decision.error,
+            )
+            if (decision.shouldExport) enqueueExport(projectId)
+        }
+    }
+
+    private fun scheduleFinalizationTimeout(projectId: String) {
+        finalizationTimeout?.cancel()
+        finalizationTimeout = viewModelScope.launch {
+            delay(15_000)
+            completeRecording(projectId, "A câmera não conseguiu finalizar o arquivo. O material bruto foi preservado.")
         }
     }
 

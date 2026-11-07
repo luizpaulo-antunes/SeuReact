@@ -41,8 +41,15 @@ class CameraCaptureController(private val context: Context) {
             QualitySelector.fromOrderedList(listOf(Quality.FHD, Quality.HD, Quality.SD)),
         ).build()
         videoCapture = VideoCapture.withOutput(recorder)
-        cameraProvider.bindToLifecycle(owner, selector(cameraFacing), preview, videoCapture)
-        view.scaleX = if (cameraFacing == CameraFacing.FRONT) -1f else 1f
+        val selectedFacing = when {
+            cameraFacing == CameraFacing.FRONT && cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraFacing.FRONT
+            cameraFacing == CameraFacing.BACK && cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraFacing.BACK
+            cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraFacing.FRONT
+            else -> CameraFacing.BACK
+        }
+        facing = selectedFacing
+        cameraProvider.bindToLifecycle(owner, selector(selectedFacing), preview, videoCapture)
+        view.scaleX = if (selectedFacing == CameraFacing.FRONT) -1f else 1f
     }
 
     suspend fun switchCamera() {
@@ -78,7 +85,6 @@ class CameraCaptureController(private val context: Context) {
 
     fun stop() {
         recording?.stop()
-        recording = null
     }
 
     fun release() {

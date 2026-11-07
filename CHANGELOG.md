@@ -10,6 +10,20 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.1.1 - 2026-11-07
+
+### Corrigido
+
+- Solicitação das permissões de câmera e microfone antes do vínculo do preview CameraX.
+- Exibição inicial da câmera frontal, com fallback seguro quando ela não estiver disponível.
+- Finalização de câmera e microfone sem deixar o projeto permanentemente em `Gravando`.
+- Tratamento de erros e timeout de finalização, preservando o material bruto como projeto interrompido.
+
+### Qualidade
+
+- Três testes de regressão para sucesso, erro da câmera e interrupção pelo ciclo de vida.
+- Testes unitários, Android Lint e APK debug validados localmente.
+
 ## 0.1.0 - 2026-11-07
 
 ### Adicionado

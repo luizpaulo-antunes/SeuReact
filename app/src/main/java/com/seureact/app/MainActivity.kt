@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import com.seureact.app.ui.MainViewModel
 import com.seureact.app.ui.MainViewModelFactory
 import com.seureact.app.ui.ReactionApp
@@ -34,13 +35,21 @@ class MainActivity : ComponentActivity() {
                 ReactionApp(
                     viewModel = viewModel,
                     requestCapturePermissions = { action ->
-                        permissionGrantedAction = action
-                        val permissions = buildList {
-                            add(Manifest.permission.CAMERA)
-                            add(Manifest.permission.RECORD_AUDIO)
-                            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                        val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (cameraGranted && audioGranted) {
+                            action()
+                        } else {
+                            permissionGrantedAction = action
+                            val permissions = buildList {
+                                add(Manifest.permission.CAMERA)
+                                add(Manifest.permission.RECORD_AUDIO)
+                                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            permissionLauncher.launch(permissions.toTypedArray())
                         }
-                        permissionLauncher.launch(permissions.toTypedArray())
                     },
                 )
             }

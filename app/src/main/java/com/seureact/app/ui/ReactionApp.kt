@@ -1,6 +1,8 @@
 package com.seureact.app.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,6 +75,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -176,7 +179,21 @@ private fun StudioScreen(
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val cameraController = remember { CameraCaptureController(context) }
+    var capturePermissionsGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
     val window = (context as? android.app.Activity)?.window
+    LaunchedEffect(Unit) {
+        if (!capturePermissionsGranted) {
+            requestCapturePermissions { capturePermissionsGranted = true }
+        }
+    }
+    DisposableEffect(cameraController) {
+        onDispose { cameraController.release() }
+    }
     DisposableEffect(state.isRecording) {
         if (state.isRecording) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
@@ -198,8 +215,18 @@ private fun StudioScreen(
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(enabled = !state.isRecording, onClick = viewModel::backHome) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
-                Text(if (state.isRecording) "Gravando reação" else "Preparar reação", style = MaterialTheme.typography.titleLarge)
+                IconButton(
+                    enabled = !state.isRecording && !state.isFinalizing,
+                    onClick = viewModel::backHome,
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+                Text(
+                    when {
+                        state.isRecording -> "Gravando reação"
+                        state.isFinalizing -> "Finalizando gravação"
+                        else -> "Preparar reação"
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 Spacer(Modifier.weight(1f))
                 if (state.isRecording) Text("● REC", color = MaterialTheme.colorScheme.primary)
             }
@@ -212,7 +239,14 @@ private fun StudioScreen(
                     factory = { PlayerView(it).apply { player = viewModel.player; useController = false } },
                     update = { it.player = viewModel.player },
                 )
-                CameraOverlay(project.cameraTransform, project.cameraShape, cameraController, project, viewModel::changeTransform)
+                CameraOverlay(
+                    project.cameraTransform,
+                    project.cameraShape,
+                    cameraController,
+                    project,
+                    capturePermissionsGranted,
+                    viewModel::changeTransform,
+                )
                 if (state.isRecording) {
                     Text(
                         formatTime(state.elapsedNanos / 1_000_000L),
@@ -222,9 +256,25 @@ private fun StudioScreen(
                     )
                 }
             }
-            if (state.isRecording) RecordingControls(state, project, viewModel)
-            else PreparationControls(project, viewModel) {
-                requestCapturePermissions { viewModel.startRecording(cameraController) }
+            if (state.isRecording) {
+                RecordingControls(state, project, viewModel)
+            } else if (state.isFinalizing) {
+                Row(
+                    Modifier.fillMaxWidth().height(90.dp).padding(20.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(Modifier.size(28.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Finalizando câmera e microfone…")
+                }
+            } else PreparationControls(project, viewModel) {
+                if (capturePermissionsGranted) {
+                    viewModel.startRecording(cameraController)
+                } else requestCapturePermissions {
+                    capturePermissionsGranted = true
+                    viewModel.startRecording(cameraController)
+                }
             }
         }
     }
@@ -236,6 +286,7 @@ private fun CameraOverlay(
     shape: CameraShape,
     controller: CameraCaptureController,
     project: ReactionProject,
+    capturePermissionsGranted: Boolean,
     onTransform: (CameraTransform) -> Unit,
 ) {
     val owner = LocalLifecycleOwner.current
@@ -243,8 +294,10 @@ private fun CameraOverlay(
     var parentWidth by remember { mutableIntStateOf(1) }
     var parentHeight by remember { mutableIntStateOf(1) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    LaunchedEffect(previewView, project.cameraFacing) {
-        previewView?.let { controller.bind(owner, it, project.cameraFacing) }
+    LaunchedEffect(previewView, project.cameraFacing, capturePermissionsGranted) {
+        if (capturePermissionsGranted) {
+            previewView?.let { controller.bind(owner, it, project.cameraFacing) }
+        }
     }
     Box(Modifier.fillMaxSize().onSizeChanged { parentWidth = it.width; parentHeight = it.height }) {
         val width = parentWidth * transform.width
@@ -283,6 +336,13 @@ private fun CameraOverlay(
                 }
             },
         )
+        if (!capturePermissionsGranted) {
+            Text(
+                "Permita câmera e microfone para exibir a câmera frontal.",
+                modifier = Modifier.align(Alignment.Center).padding(12.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
