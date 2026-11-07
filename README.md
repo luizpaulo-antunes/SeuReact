@@ -29,7 +29,7 @@ Todo evento armazena o tempo final relativo a `elapsedRealtimeNanos` e a posiç�
 
 Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute, volumes, zoom e apontadores são associados ao segmento vigente.
 
-Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Preview e MP4 usam os mesmos vetores e hotspots; na seta, a ponta termina exatamente no local tocado e a cauda se adapta às bordas. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
+Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com os marcadores Toque, Seta ou Clique. Preview e MP4 usam os mesmos vetores e hotspots; na seta, a ponta termina exatamente no local tocado e a cauda se adapta às bordas. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
 
 ## Requisitos
 

@@ -9,6 +9,26 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
 
+## 0.2.2-rc.4 - 2026-11-07
+
+### Corrigido
+
+- O vídeo original agora é escalado dos pixels nativos para preencher a saída mantendo sua proporção, eliminando a miniatura central cercada por preto.
+- A câmera volta a permanecer visualmente vinculada ao vídeo, preservando posição e tamanho relativos no preview e no MP4.
+
+### Interface
+
+- Painel de gravação reduzido para manter o vídeo como elemento principal da tela.
+- Timeline, play/pause, saltos, mute, descarte e finalização permanecem sempre visíveis.
+- Marcadores, zoom e volume ficam recolhidos em `Destaques e ajustes` e só ocupam espaço quando solicitados.
+- As opções de marcador agora são `Toque`, `Seta` e `Clique`.
+- `Clique` usa um alvo pulsante de alto contraste em vez de um desenho de mouse.
+
+### Qualidade
+
+- Trinta e nove testes unitários aprovados, incluindo escala do vídeo original em resoluções e proporções diferentes.
+- Android Lint, APK debug e APK de testes instrumentados validados localmente.
+
 ## 0.2.2-rc.3 - 2026-11-07
 
 ### Corrigido

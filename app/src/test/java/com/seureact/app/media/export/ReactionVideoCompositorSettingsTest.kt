@@ -4,6 +4,7 @@ import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.SourceMetadata
+import com.seureact.app.domain.model.SourceTransform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,5 +66,27 @@ class ReactionVideoCompositorSettingsTest {
 
         assertTrue(scale.x.isFinite() && scale.x != 0f)
         assertTrue(scale.y.isFinite() && scale.y > 0f)
+    }
+
+    @Test
+    fun `source is scaled from native pixels to fill original output`() {
+        val scale = sourceOverlayScale(
+            input = Size(360, 640),
+            output = Size(720, 1280),
+            transform = SourceTransform(),
+        )
+
+        assertEquals(2f, scale, 0f)
+    }
+
+    @Test
+    fun `source keeps aspect ratio when output uses another format`() {
+        val scale = sourceOverlayScale(
+            input = Size(1920, 1080),
+            output = Size(720, 1280),
+            transform = SourceTransform(scale = 1.5f),
+        )
+
+        assertEquals(0.5625f, scale, 0.0001f)
     }
 }

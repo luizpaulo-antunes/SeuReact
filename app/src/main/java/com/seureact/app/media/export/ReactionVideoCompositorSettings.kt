@@ -8,7 +8,9 @@ import androidx.media3.effect.StaticOverlaySettings
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
 import com.seureact.app.domain.model.ReactionProject
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.timeline.RenderSegment
+import kotlin.math.min
 
 internal data class CameraOverlayScale(val x: Float, val y: Float)
 
@@ -30,6 +32,10 @@ internal fun cameraOverlayScale(
         y = targetHeight / input.height,
     )
 }
+
+@UnstableApi
+internal fun sourceOverlayScale(input: Size, output: Size, transform: SourceTransform): Float =
+    min(output.width.toFloat() / input.width, output.height.toFloat() / input.height) * transform.scale
 
 @UnstableApi
 class ReactionVideoCompositorSettings(
@@ -74,11 +80,12 @@ class ReactionVideoCompositorSettings(
                     .build()
             }
             ReactionVideoLayer.SOURCE -> {
-                val transform = segment?.sourceTransform ?: com.seureact.app.domain.model.SourceTransform()
+                val transform = segment?.sourceTransform ?: SourceTransform()
                 val anchorX = transform.focusX * 2f - 1f
                 val anchorY = 1f - transform.focusY * 2f
+                val scale = sourceOverlayScale(sourceDisplaySize, outputSize, transform)
                 StaticOverlaySettings.Builder()
-                    .setScale(transform.scale, transform.scale)
+                    .setScale(scale, scale)
                     .setOverlayFrameAnchor(anchorX, anchorY)
                     .setBackgroundFrameAnchor(anchorX, anchorY)
                     .build()

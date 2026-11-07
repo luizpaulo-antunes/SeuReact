@@ -39,14 +39,12 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -506,6 +504,7 @@ private fun <T> ChoiceRow(title: String, values: List<T>, selected: T, label: (T
 @Composable
 private fun RecordingControls(state: MainUiState, project: ReactionProject, viewModel: MainViewModel) {
     var confirmDiscard by remember { mutableStateOf(false) }
+    var toolsExpanded by remember { mutableStateOf(false) }
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
@@ -523,74 +522,103 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
     Column(
         Modifier.fillMaxWidth().background(
             MaterialTheme.colorScheme.surfaceContainer,
-            RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        ).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+            RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        ).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text("Toque para destacar", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PointerStyle.entries.forEach { style ->
-                FilterChip(
-                    selected = state.pointerStyle == style,
-                    onClick = { viewModel.setPointerStyle(style) },
-                    label = { Text(pointerStyleLabel(style)) },
-                    leadingIcon = {
-                        Icon(
-                            when (style) {
-                                PointerStyle.FINGER -> Icons.Default.TouchApp
-                                PointerStyle.ARROW -> Icons.Default.ArrowUpward
-                                PointerStyle.MOUSE -> Icons.Default.Mouse
-                            },
-                            null,
-                            Modifier.size(18.dp),
-                        )
-                    },
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Vídeo", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${formatTime(state.sourcePositionMs)} / ${formatTime(project.metadata.durationMs)}",
+                    style = MaterialTheme.typography.titleMedium,
                 )
             }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.ZoomOutMap, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Slider(
-                value = state.sourceTransform.scale,
-                onValueChange = { viewModel.changeSourceTransform(state.sourceTransform.copy(scale = it)) },
-                valueRange = 1f..4f,
-                modifier = Modifier.weight(1f),
-            )
-            Text(String.format(java.util.Locale.getDefault(), "%.1fx", state.sourceTransform.scale))
-            TextButton(enabled = state.sourceTransform.scale > 1f, onClick = viewModel::resetSourceZoom) { Text("Redefinir") }
+            TextButton(onClick = { toolsExpanded = !toolsExpanded }) {
+                Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (toolsExpanded) "Fechar ferramentas" else "Destaques e ajustes")
+            }
         }
         Slider(
             value = state.sourcePositionMs.toFloat().coerceIn(0f, project.metadata.durationMs.toFloat()),
             onValueChange = { viewModel.seekTo(it.toLong()) },
             valueRange = 0f..project.metadata.durationMs.toFloat().coerceAtLeast(1f),
+            modifier = Modifier.fillMaxWidth().height(32.dp),
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(formatTime(state.sourcePositionMs))
-            Text("Reação ${formatTime(state.elapsedNanos / 1_000_000L)}")
-            Text(formatTime(project.metadata.durationMs))
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, null)
-            Slider(
-                value = project.sourceVolume,
-                onValueChange = { viewModel.updateSetup(sourceVolume = it) },
-                valueRange = 0f..1f,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { viewModel.seekTo(state.sourcePositionMs - 5_000) }) { Icon(Icons.Default.FastRewind, "Voltar 5 segundos") }
-            IconButton(onClick = viewModel::togglePlayback, modifier = Modifier.size(58.dp).background(MaterialTheme.colorScheme.primary, CircleShape)) {
+        Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { viewModel.seekTo(state.sourcePositionMs - 5_000) }) {
+                Icon(Icons.Default.FastRewind, "Voltar 5 segundos")
+            }
+            IconButton(onClick = viewModel::togglePlayback, modifier = Modifier.size(52.dp).background(MaterialTheme.colorScheme.primary, CircleShape)) {
                 Icon(if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play ou pause")
             }
-            IconButton(onClick = { viewModel.seekTo(state.sourcePositionMs + 5_000) }) { Icon(Icons.Default.FastForward, "Avançar 5 segundos") }
-            IconButton(onClick = viewModel::toggleMute) { Icon(if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, "Áudio original") }
+            IconButton(onClick = { viewModel.seekTo(state.sourcePositionMs + 5_000) }) {
+                Icon(Icons.Default.FastForward, "Avançar 5 segundos")
+            }
+            IconButton(onClick = viewModel::toggleMute) {
+                Icon(
+                    if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    "Áudio original",
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
+        if (toolsExpanded) {
+            Column(
+                Modifier.fillMaxWidth().background(
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                    RoundedCornerShape(16.dp),
+                ).padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Text("Marcador ao tocar no vídeo", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PointerStyle.entries.forEach { style ->
+                        FilterChip(
+                            selected = state.pointerStyle == style,
+                            onClick = { viewModel.setPointerStyle(style) },
+                            label = { Text(pointerStyleLabel(style)) },
+                            leadingIcon = {
+                                Image(
+                                    painterResource(PointerMarkerVisuals.drawable(style)),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            },
+                        )
+                    }
+                }
+                Row(Modifier.height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ZoomOutMap, "Zoom", Modifier.size(18.dp))
+                    Slider(
+                        value = state.sourceTransform.scale,
+                        onValueChange = { viewModel.changeSourceTransform(state.sourceTransform.copy(scale = it)) },
+                        valueRange = 1f..4f,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(String.format(java.util.Locale.getDefault(), "%.1fx", state.sourceTransform.scale))
+                    TextButton(enabled = state.sourceTransform.scale > 1f, onClick = viewModel::resetSourceZoom) {
+                        Text("Resetar")
+                    }
+                }
+                Row(Modifier.height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                        "Volume do vídeo",
+                        Modifier.size(18.dp),
+                    )
+                    Slider(
+                        value = project.sourceVolume,
+                        onValueChange = { viewModel.updateSetup(sourceVolume = it) },
+                        valueRange = 0f..1f,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { confirmDiscard = true },
-                modifier = Modifier.weight(1f).height(50.dp),
+                modifier = Modifier.weight(1f).height(48.dp),
             ) {
                 Icon(Icons.Default.DeleteOutline, null)
                 Spacer(Modifier.width(6.dp))
@@ -598,7 +626,7 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
             }
             Button(
                 onClick = viewModel::finishRecording,
-                modifier = Modifier.weight(1f).height(50.dp),
+                modifier = Modifier.weight(1f).height(48.dp),
             ) {
                 Icon(Icons.Default.Stop, null)
                 Spacer(Modifier.width(6.dp))
@@ -609,9 +637,9 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
 }
 
 private fun pointerStyleLabel(style: PointerStyle) = when (style) {
-    PointerStyle.FINGER -> "Dedo"
+    PointerStyle.FINGER -> "Toque"
     PointerStyle.ARROW -> "Seta"
-    PointerStyle.MOUSE -> "Mouse"
+    PointerStyle.MOUSE -> "Clique"
 }
 
 private fun cameraShapeLabel(shape: CameraShape) = when (shape) {
