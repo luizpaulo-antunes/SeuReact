@@ -63,4 +63,5 @@ data class TimelineEventEntity(
     val mirrored: Boolean? = null,
     val cameraShape: String? = null,
     val cameraFacing: String? = null,
+    val stringValue: String? = null,
 )

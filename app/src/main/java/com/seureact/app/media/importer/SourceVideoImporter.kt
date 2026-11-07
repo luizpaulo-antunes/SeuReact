@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.SourceMetadata
+import com.seureact.app.media.SourceVideoGeometry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -33,7 +34,9 @@ class SourceVideoImporter(private val context: Context) {
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             require(durationMs > 0 && width > 0 && height > 0) { "Vídeo inválido ou não decodificável" }
+            val orientedSize = SourceVideoGeometry.orientedSize(width, height, rotation)
             var hasVideo = false
             var hasAudio = false
             repeat(extractor.trackCount) { index ->
@@ -46,7 +49,10 @@ class SourceVideoImporter(private val context: Context) {
                 id = projectId,
                 sourceUri = uri.toString(),
                 localSourcePath = localSource.absolutePath,
-                metadata = SourceMetadata(displayName, durationMs, width, height, hasAudio, mimeType.ifBlank { "video/mp4" }),
+                metadata = SourceMetadata(
+                    displayName, durationMs, orientedSize.width, orientedSize.height,
+                    hasAudio, mimeType.ifBlank { "video/mp4" },
+                ),
             )
         } finally {
             retriever.release()

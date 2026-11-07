@@ -15,6 +15,8 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ToInt16PcmAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Size
+import androidx.media3.effect.OverlayEffect
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -26,6 +28,7 @@ import androidx.media3.transformer.Transformer
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.timeline.RenderSegment
 import com.seureact.app.domain.timeline.SourceRenderMode
+import com.seureact.app.media.SourceVideoGeometry
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -64,6 +67,13 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
     ): Composition {
         val stillDirectory = File(context.cacheDir, "stills/${project.id}").apply { mkdirs() }
         val retriever = MediaMetadataRetriever().apply { setDataSource(project.localSourcePath) }
+        val encodedWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            ?: project.metadata.width
+        val encodedHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            ?: project.metadata.height
+        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        val orientedDimensions = SourceVideoGeometry.orientedSize(encodedWidth, encodedHeight, rotation)
+        val sourceDisplaySize = Size(orientedDimensions.width, orientedDimensions.height)
         val sourceItems = try {
             segments.mapIndexed { index, segment ->
                 when (segment.sourceMode) {
@@ -72,6 +82,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
                         startMs = segment.sourceStartMs,
                         endMs = segment.sourceEndMs,
                         volume = if (segment.sourceMuted) 0f else segment.sourceVolume,
+                        videoEffects = sourceVideoEffects(segment),
                     )
                     SourceRenderMode.FROZEN -> {
                         val frameFile = File(stillDirectory, "frame_$index.jpg")
@@ -81,7 +92,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
                         ) ?: error("Não foi possível obter o frame congelado em ${segment.sourceStartMs} ms")
                         frameFile.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
                         bitmap.recycle()
-                        editedImage(frameFile, segment.durationNanos / 1_000_000L)
+                        editedImage(frameFile, segment.durationNanos / 1_000_000L, sourceVideoEffects(segment))
                     }
                 }
             }
@@ -94,6 +105,7 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
                 startMs = segment.cameraStartNanos / 1_000_000L,
                 endMs = segment.cameraEndNanos / 1_000_000L,
                 volume = segment.microphoneVolume,
+                videoEffects = listOf(CameraMaskEffect(segment.cameraShape)),
             )
         }
         val sourceSequence = EditedMediaItemSequence.withAudioAndVideoFrom(sourceItems)
@@ -103,11 +115,17 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
             ReactionVideoLayer.SOURCE to sourceSequence,
         )
         return Composition.Builder(ReactionVideoLayerOrder.compositionOrder.map(sequences::getValue))
-            .setVideoCompositorSettings(ReactionVideoCompositorSettings(project, segments))
+            .setVideoCompositorSettings(ReactionVideoCompositorSettings(project, segments, sourceDisplaySize))
             .build()
     }
 
-    private fun editedVideo(path: String, startMs: Long, endMs: Long, volume: Float): EditedMediaItem {
+    private fun editedVideo(
+        path: String,
+        startMs: Long,
+        endMs: Long,
+        volume: Float,
+        videoEffects: List<Effect> = emptyList(),
+    ): EditedMediaItem {
         val mediaItem = MediaItem.Builder()
             .setUri(Uri.fromFile(File(path)))
             .setClippingConfiguration(
@@ -118,19 +136,22 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
             )
             .build()
         return EditedMediaItem.Builder(mediaItem)
-            .setEffects(volumeEffects(volume))
+            .setEffects(mediaEffects(volume, videoEffects))
             .build()
     }
 
-    private fun editedImage(file: File, durationMs: Long): EditedMediaItem {
+    private fun editedImage(file: File, durationMs: Long, videoEffects: List<Effect>): EditedMediaItem {
         val mediaItem = MediaItem.Builder()
             .setUri(Uri.fromFile(file))
             .setImageDurationMs(durationMs.coerceAtLeast(1))
             .build()
-        return EditedMediaItem.Builder(mediaItem).setFrameRate(30).build()
+        return EditedMediaItem.Builder(mediaItem)
+            .setFrameRate(30)
+            .setEffects(Effects(emptyList(), videoEffects))
+            .build()
     }
 
-    private fun volumeEffects(volume: Float): Effects {
+    private fun mediaEffects(volume: Float, videoEffects: List<Effect>): Effects {
         val channelMixer = ChannelMixingAudioProcessor().apply {
             (1..8).forEach { inputChannels ->
                 putChannelMixingMatrix(StereoChannelMixingMatrixFactory.create(inputChannels))
@@ -141,7 +162,13 @@ class AndroidReactionExporter(private val context: Context) : ReactionExporter {
             channelMixer,
             PcmVolumeAudioProcessor(volume.coerceIn(0f, 2f) * MIX_HEADROOM),
         )
-        return Effects(processors, emptyList<Effect>())
+        return Effects(processors, videoEffects)
+    }
+
+    private fun sourceVideoEffects(segment: RenderSegment): List<Effect> = buildList {
+        segment.pointerMarker?.let { marker ->
+            add(OverlayEffect(listOf(PointerCanvasOverlay(marker))))
+        }
     }
 
     private suspend fun awaitExport(

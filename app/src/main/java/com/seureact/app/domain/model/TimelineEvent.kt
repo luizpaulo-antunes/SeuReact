@@ -13,6 +13,7 @@ sealed interface TimelineEvent {
         val cameraTransform: CameraTransform = CameraTransform(),
         val cameraShape: CameraShape = CameraShape.CIRCLE,
         val cameraFacing: CameraFacing = CameraFacing.FRONT,
+        val sourceTransform: SourceTransform = SourceTransform(),
     ) : TimelineEvent
 
     data class SourcePlay(override val finalTimeNanos: Long, override val sourcePositionMs: Long) : TimelineEvent
@@ -47,6 +48,20 @@ sealed interface TimelineEvent {
         override val finalTimeNanos: Long,
         override val sourcePositionMs: Long,
         val facing: CameraFacing,
+    ) : TimelineEvent
+    data class SourceTransformChanged(
+        override val finalTimeNanos: Long,
+        override val sourcePositionMs: Long,
+        val transform: SourceTransform,
+    ) : TimelineEvent
+    data class PointerPlaced(
+        override val finalTimeNanos: Long,
+        override val sourcePositionMs: Long,
+        val marker: PointerMarker,
+    ) : TimelineEvent
+    data class PointerCleared(
+        override val finalTimeNanos: Long,
+        override val sourcePositionMs: Long,
     ) : TimelineEvent
     data class SessionFinished(override val finalTimeNanos: Long, override val sourcePositionMs: Long) : TimelineEvent
 }

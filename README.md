@@ -27,7 +27,9 @@ Todo evento armazena o tempo final relativo a `elapsedRealtimeNanos` e a posiç�
 - timeline final/câmera: sempre avança;
 - timeline da fonte: avança durante play, permanece fixa durante pause e muda imediatamente em seek.
 
-Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute e volumes são associados ao segmento vigente.
+Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute, volumes, zoom e apontadores são associados ao segmento vigente.
+
+Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com dedo, seta ou mouse. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface.
 
 ## Requisitos
 
@@ -62,6 +64,9 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 | Cenário | Verificação |
 |---|---|
 | MP4 vertical e horizontal | letterbox/crop e orientação corretos |
+| Formato Original | mesma proporção visual da fonte, incluindo rotação 90°/270° |
+| Câmera circular/arredondada | máscara correta no preview e no MP4 |
+| Zoom e apontadores | enquadramento e destaque coincidem com a gravação |
 | Pausa de 30 segundos | fonte congelada; câmera e microfone contínuos |
 | Muitos seeks | saltos e repetições na ordem realizada |
 | Fonte sem áudio | comentário presente e sem falha na composição |
@@ -75,7 +80,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 - O tempo inicial da sessão é ancorado no evento `VideoRecordEvent.Start`; aparelhos podem introduzir pequena latência interna antes do primeiro sample. Valide sincronia por modelo.
 - Seek depende da precisão do decoder e dos keyframes do arquivo; Transformer decodifica a partir do ponto seguro e recorta por timestamp.
 - O compositor Media3 é uma API marcada como instável; está isolado atrás de `ReactionExporter` para permitir troca por um pipeline MediaCodec/OpenGL próprio.
-- A máscara circular/arredondada é aplicada no preview. A versão atual do exportador posiciona e escala a câmera por OpenGL, mas a máscara de shape ainda depende de um `GlEffect` dedicado antes de ser considerada pronta para produção.
+- Máscaras, zoom e composição usam efeitos OpenGL personalizados; valide os shaders nos aparelhos e GPUs que representam o público-alvo.
 - Arquivos HDR são tratados pelo comportamento padrão do Transformer; a matriz de validação deve incluir aparelhos e codecs usados pelo público-alvo.
 
 ## Privacidade e arquivos

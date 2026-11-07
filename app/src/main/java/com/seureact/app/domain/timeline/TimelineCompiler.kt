@@ -3,6 +3,8 @@ package com.seureact.app.domain.timeline
 import com.seureact.app.domain.model.CameraFacing
 import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraTransform
+import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.model.TimelineEvent
 
 enum class SourceRenderMode { PLAYING, FROZEN }
@@ -21,6 +23,8 @@ data class RenderSegment(
     val sourceMuted: Boolean,
     val sourceVolume: Float,
     val microphoneVolume: Float,
+    val sourceTransform: SourceTransform,
+    val pointerMarker: PointerMarker?,
 ) {
     val durationNanos: Long get() = finalEndNanos - finalStartNanos
 }
@@ -62,6 +66,8 @@ class TimelineCompiler {
                     sourceMuted = state.muted,
                     sourceVolume = state.sourceVolume,
                     microphoneVolume = state.microphoneVolume,
+                    sourceTransform = state.sourceTransform,
+                    pointerMarker = state.pointerMarker,
                 )
                 state = state.copy(sourcePositionMs = sourceEndMs)
             }
@@ -82,6 +88,8 @@ class TimelineCompiler {
         val transform: CameraTransform,
         val shape: CameraShape,
         val facing: CameraFacing,
+        val sourceTransform: SourceTransform,
+        val pointerMarker: PointerMarker?,
     ) {
         fun apply(event: TimelineEvent): State = when (event) {
             is TimelineEvent.SessionStarted -> from(event)
@@ -94,6 +102,9 @@ class TimelineCompiler {
             is TimelineEvent.CameraTransformChanged -> copy(sourcePositionMs = event.sourcePositionMs, transform = event.transform)
             is TimelineEvent.CameraShapeChanged -> copy(sourcePositionMs = event.sourcePositionMs, shape = event.shape)
             is TimelineEvent.CameraSwitched -> copy(sourcePositionMs = event.sourcePositionMs, facing = event.facing)
+            is TimelineEvent.SourceTransformChanged -> copy(sourcePositionMs = event.sourcePositionMs, sourceTransform = event.transform)
+            is TimelineEvent.PointerPlaced -> copy(sourcePositionMs = event.sourcePositionMs, pointerMarker = event.marker)
+            is TimelineEvent.PointerCleared -> copy(sourcePositionMs = event.sourcePositionMs, pointerMarker = null)
             is TimelineEvent.SessionFinished -> copy(sourcePositionMs = event.sourcePositionMs)
         }
 
@@ -107,6 +118,8 @@ class TimelineCompiler {
                 transform = event.cameraTransform,
                 shape = event.cameraShape,
                 facing = event.cameraFacing,
+                sourceTransform = event.sourceTransform,
+                pointerMarker = null,
             )
         }
     }

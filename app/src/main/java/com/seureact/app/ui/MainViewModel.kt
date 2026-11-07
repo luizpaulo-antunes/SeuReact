@@ -18,9 +18,12 @@ import com.seureact.app.domain.model.CameraFacing
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
+import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.PointerStyle
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.TimelineEvent
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.session.RecordingFinalizationPolicy
 import com.seureact.app.media.capture.CameraCaptureController
 import com.seureact.app.media.capture.SessionClock
@@ -50,6 +53,9 @@ data class MainUiState(
     val message: String? = null,
     val exportProgress: Int = 0,
     val exportState: WorkInfo.State? = null,
+    val sourceTransform: SourceTransform = SourceTransform(),
+    val pointerStyle: PointerStyle = PointerStyle.FINGER,
+    val activePointer: PointerMarker? = null,
 )
 
 class MainViewModel(application: Application, private val container: AppContainer) : AndroidViewModel(application) {
@@ -64,6 +70,7 @@ class MainViewModel(application: Application, private val container: AppContaine
     private var activeRecordingProjectId: String? = null
     private var interruptionReason: String? = null
     private var finalizationTimeout: Job? = null
+    private var pointerClearJob: Job? = null
 
     fun importVideo(uri: Uri) {
         viewModelScope.launch {
@@ -173,9 +180,10 @@ class MainViewModel(application: Application, private val container: AppContaine
                         cameraTransform = updated.cameraTransform,
                         cameraShape = updated.cameraShape,
                         cameraFacing = updated.cameraFacing,
+                        sourceTransform = mutableState.value.sourceTransform,
                     ))
                     mutableState.value = mutableState.value.copy(
-                        project = updated, isRecording = true, isPlaying = true, message = null,
+                        project = updated, isRecording = true, isPlaying = true, activePointer = null, message = null,
                     )
                     player.play()
                 }
@@ -235,6 +243,38 @@ class MainViewModel(application: Application, private val container: AppContaine
         }
     }
 
+    fun changeSourceTransform(transform: SourceTransform) {
+        if (!mutableState.value.isRecording) return
+        val constrained = transform.copy(
+            scale = transform.scale.coerceIn(1f, 4f),
+            focusX = transform.focusX.coerceIn(0f, 1f),
+            focusY = transform.focusY.coerceIn(0f, 1f),
+        )
+        mutableState.value = mutableState.value.copy(sourceTransform = constrained)
+        persist(TimelineEvent.SourceTransformChanged(clock!!.elapsedNanos(), player.currentPosition, constrained))
+    }
+
+    fun resetSourceZoom() = changeSourceTransform(SourceTransform())
+
+    fun setPointerStyle(style: PointerStyle) {
+        mutableState.value = mutableState.value.copy(pointerStyle = style)
+    }
+
+    fun placePointer(x: Float, y: Float) {
+        if (!mutableState.value.isRecording) return
+        val marker = PointerMarker(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f), mutableState.value.pointerStyle)
+        mutableState.value = mutableState.value.copy(activePointer = marker)
+        persist(TimelineEvent.PointerPlaced(clock!!.elapsedNanos(), player.currentPosition, marker))
+        pointerClearJob?.cancel()
+        pointerClearJob = viewModelScope.launch {
+            delay(POINTER_DURATION_MS)
+            if (mutableState.value.isRecording) {
+                persist(TimelineEvent.PointerCleared(clock!!.elapsedNanos(), player.currentPosition))
+                mutableState.value = mutableState.value.copy(activePointer = null)
+            }
+        }
+    }
+
     fun tick() {
         val currentClock = clock ?: return
         val previousWasPlaying = mutableState.value.isPlaying
@@ -251,6 +291,7 @@ class MainViewModel(application: Application, private val container: AppContaine
     fun finishRecording() {
         if (!mutableState.value.isRecording) return
         player.pause()
+        pointerClearJob?.cancel()
         exportAfterFinalize = true
         interruptionReason = null
         mutableState.value = mutableState.value.copy(
@@ -270,6 +311,7 @@ class MainViewModel(application: Application, private val container: AppContaine
         interruptionReason = reason
         recordingController?.stop()
         player.pause()
+        pointerClearJob?.cancel()
         mutableState.value = mutableState.value.copy(
             isRecording = false,
             isFinalizing = true,
@@ -312,6 +354,7 @@ class MainViewModel(application: Application, private val container: AppContaine
                 isRecording = false,
                 isFinalizing = false,
                 isPlaying = false,
+                activePointer = null,
                 screen = if (decision.shouldExport) AppScreen.EXPORT else AppScreen.STUDIO,
                 message = decision.error,
             )
@@ -372,4 +415,8 @@ class MainViewModel(application: Application, private val container: AppContaine
     }
 
     private fun workName(projectId: String) = "export_$projectId"
+
+    private companion object {
+        const val POINTER_DURATION_MS = 900L
+    }
 }

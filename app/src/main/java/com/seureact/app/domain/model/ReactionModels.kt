@@ -8,6 +8,7 @@ enum class ProjectStatus {
 
 enum class CameraShape { CIRCLE, SQUARE, ROUNDED_RECTANGLE }
 enum class CameraFacing { FRONT, BACK }
+enum class PointerStyle { FINGER, ARROW, MOUSE }
 enum class OutputAspect { ORIGINAL, PORTRAIT_9_16, LANDSCAPE_16_9, SQUARE }
 enum class OutputResolution { HD_720, FULL_HD_1080 }
 
@@ -17,6 +18,18 @@ data class CameraTransform(
     val width: Float = 0.28f,
     val height: Float = 0.28f,
     val mirrored: Boolean = true,
+)
+
+data class SourceTransform(
+    val scale: Float = 1f,
+    val focusX: Float = 0.5f,
+    val focusY: Float = 0.5f,
+)
+
+data class PointerMarker(
+    val x: Float,
+    val y: Float,
+    val style: PointerStyle,
 )
 
 data class SourceMetadata(

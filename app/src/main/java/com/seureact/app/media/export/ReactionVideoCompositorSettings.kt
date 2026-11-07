@@ -14,6 +14,7 @@ import com.seureact.app.domain.timeline.RenderSegment
 class ReactionVideoCompositorSettings(
     private val project: ReactionProject,
     private val segments: List<RenderSegment>,
+    private val sourceDisplaySize: Size = Size(project.metadata.width, project.metadata.height),
 ) : VideoCompositorSettings {
     override fun getOutputSize(inputSizes: List<Size>): Size {
         require(inputSizes.size == ReactionVideoLayerOrder.compositionOrder.size) {
@@ -25,25 +26,37 @@ class ReactionVideoCompositorSettings(
             OutputAspect.LANDSCAPE_16_9 -> Size(longEdge, longEdge * 9 / 16)
             OutputAspect.SQUARE -> Size(if (longEdge == 1920) 1080 else 720, if (longEdge == 1920) 1080 else 720)
             OutputAspect.ORIGINAL -> {
-                val scale = longEdge.toFloat() / maxOf(project.metadata.width, project.metadata.height)
-                Size(even(project.metadata.width * scale), even(project.metadata.height * scale))
+                val scale = longEdge.toFloat() / maxOf(sourceDisplaySize.width, sourceDisplaySize.height)
+                Size(even(sourceDisplaySize.width * scale), even(sourceDisplaySize.height * scale))
             }
         }
     }
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
-        if (ReactionVideoLayerOrder.layerForInputId(inputId) != ReactionVideoLayer.CAMERA) {
-            return StaticOverlaySettings.Builder().build()
-        }
         val timeNanos = presentationTimeUs * 1_000L
-        val transform = segments.firstOrNull { timeNanos in it.finalStartNanos until it.finalEndNanos }
-            ?.cameraTransform ?: project.cameraTransform
-        val scaleX = if (transform.mirrored) -transform.width else transform.width
-        return StaticOverlaySettings.Builder()
-            .setScale(scaleX, transform.height)
-            .setOverlayFrameAnchor(0f, 0f)
-            .setBackgroundFrameAnchor(transform.centerX * 2f - 1f, 1f - transform.centerY * 2f)
-            .build()
+        val segment = segments.firstOrNull { timeNanos in it.finalStartNanos until it.finalEndNanos }
+        return when (ReactionVideoLayerOrder.layerForInputId(inputId)) {
+            ReactionVideoLayer.CAMERA -> {
+                val transform = segment?.cameraTransform ?: project.cameraTransform
+                val scaleX = if (transform.mirrored) -transform.width else transform.width
+                StaticOverlaySettings.Builder()
+                    .setScale(scaleX, transform.height)
+                    .setOverlayFrameAnchor(0f, 0f)
+                    .setBackgroundFrameAnchor(transform.centerX * 2f - 1f, 1f - transform.centerY * 2f)
+                    .build()
+            }
+            ReactionVideoLayer.SOURCE -> {
+                val transform = segment?.sourceTransform ?: com.seureact.app.domain.model.SourceTransform()
+                val anchorX = transform.focusX * 2f - 1f
+                val anchorY = 1f - transform.focusY * 2f
+                StaticOverlaySettings.Builder()
+                    .setScale(transform.scale, transform.scale)
+                    .setOverlayFrameAnchor(anchorX, anchorY)
+                    .setBackgroundFrameAnchor(anchorX, anchorY)
+                    .build()
+            }
+            null -> StaticOverlaySettings.Builder().build()
+        }
     }
 
     private fun even(value: Float): Int = (value.toInt().coerceAtLeast(2) / 2) * 2

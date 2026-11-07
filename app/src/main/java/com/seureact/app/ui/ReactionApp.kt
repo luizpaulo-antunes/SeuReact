@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,10 +38,14 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -67,9 +72,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -86,8 +93,11 @@ import com.seureact.app.domain.model.CameraFacing
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
+import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.PointerStyle
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.model.ReactionProject
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.media.capture.CameraCaptureController
 import java.io.File
 import kotlin.math.roundToInt
@@ -235,10 +245,22 @@ private fun StudioScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        scaleX = state.sourceTransform.scale
+                        scaleY = state.sourceTransform.scale
+                        transformOrigin = TransformOrigin(state.sourceTransform.focusX, state.sourceTransform.focusY)
+                    },
                     factory = { PlayerView(it).apply { player = viewModel.player; useController = false } },
                     update = { it.player = viewModel.player },
                 )
+                if (state.isRecording) {
+                    SourceInteractionLayer(
+                        transform = state.sourceTransform,
+                        marker = state.activePointer,
+                        onTransform = viewModel::changeSourceTransform,
+                        onTap = viewModel::placePointer,
+                    )
+                }
                 CameraOverlay(
                     project.cameraTransform,
                     project.cameraShape,
@@ -278,6 +300,71 @@ private fun StudioScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SourceInteractionLayer(
+    transform: SourceTransform,
+    marker: PointerMarker?,
+    onTransform: (SourceTransform) -> Unit,
+    onTap: (Float, Float) -> Unit,
+) {
+    var width by remember { mutableIntStateOf(1) }
+    var height by remember { mutableIntStateOf(1) }
+    Box(
+        Modifier.fillMaxSize()
+            .onSizeChanged { width = it.width; height = it.height }
+            .pointerInput(transform) {
+                detectTransformGestures { centroid, pan, zoom, _ ->
+                    onTransform(
+                        transform.copy(
+                            scale = transform.scale * zoom,
+                            focusX = centroid.x / width - pan.x / width,
+                            focusY = centroid.y / height - pan.y / height,
+                        ),
+                    )
+                }
+            }
+            .pointerInput(transform) {
+                detectTapGestures { position ->
+                    val screenX = position.x / width
+                    val screenY = position.y / height
+                    onTap(
+                        transform.focusX + (screenX - transform.focusX) / transform.scale,
+                        transform.focusY + (screenY - transform.focusY) / transform.scale,
+                    )
+                }
+            },
+    ) {
+        marker?.let {
+            val screenX = transform.focusX + (it.x - transform.focusX) * transform.scale
+            val screenY = transform.focusY + (it.y - transform.focusY) * transform.scale
+            PointerMarkerIcon(
+                marker = it,
+                modifier = Modifier.offset {
+                    IntOffset(
+                        (screenX * width).roundToInt() - 24.dp.roundToPx(),
+                        (screenY * height).roundToInt() - 24.dp.roundToPx(),
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PointerMarkerIcon(marker: PointerMarker, modifier: Modifier = Modifier) {
+    val icon = when (marker.style) {
+        PointerStyle.FINGER -> Icons.Default.TouchApp
+        PointerStyle.ARROW -> Icons.Default.ArrowUpward
+        PointerStyle.MOUSE -> Icons.Default.Mouse
+    }
+    Icon(
+        icon,
+        pointerStyleLabel(marker.style),
+        modifier = modifier.size(48.dp).background(MaterialTheme.colorScheme.tertiary, CircleShape).padding(10.dp),
+        tint = MaterialTheme.colorScheme.onTertiary,
+    )
 }
 
 @Composable
@@ -353,7 +440,7 @@ private fun PreparationControls(project: ReactionProject, viewModel: MainViewMod
         modifier = Modifier.fillMaxWidth().height(300.dp).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { ChoiceRow("Câmera", CameraShape.entries, project.cameraShape, { it.name.lowercase() }) { viewModel.updateSetup(shape = it) } }
+        item { ChoiceRow("Formato da câmera", CameraShape.entries, project.cameraShape, ::cameraShapeLabel) { viewModel.updateSetup(shape = it) } }
         item {
             Button(onClick = {
                 viewModel.setCameraFacing(if (project.cameraFacing == CameraFacing.FRONT) CameraFacing.BACK else CameraFacing.FRONT)
@@ -383,7 +470,45 @@ private fun <T> ChoiceRow(title: String, values: List<T>, selected: T, label: (T
 
 @Composable
 private fun RecordingControls(state: MainUiState, project: ReactionProject, viewModel: MainViewModel) {
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(14.dp)) {
+    Column(
+        Modifier.fillMaxWidth().background(
+            MaterialTheme.colorScheme.surfaceContainer,
+            RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text("Toque para destacar", style = MaterialTheme.typography.labelLarge)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PointerStyle.entries.forEach { style ->
+                FilterChip(
+                    selected = state.pointerStyle == style,
+                    onClick = { viewModel.setPointerStyle(style) },
+                    label = { Text(pointerStyleLabel(style)) },
+                    leadingIcon = {
+                        Icon(
+                            when (style) {
+                                PointerStyle.FINGER -> Icons.Default.TouchApp
+                                PointerStyle.ARROW -> Icons.Default.ArrowUpward
+                                PointerStyle.MOUSE -> Icons.Default.Mouse
+                            },
+                            null,
+                            Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.ZoomOutMap, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Slider(
+                value = state.sourceTransform.scale,
+                onValueChange = { viewModel.changeSourceTransform(state.sourceTransform.copy(scale = it)) },
+                valueRange = 1f..4f,
+                modifier = Modifier.weight(1f),
+            )
+            Text(String.format(java.util.Locale.getDefault(), "%.1fx", state.sourceTransform.scale))
+            TextButton(enabled = state.sourceTransform.scale > 1f, onClick = viewModel::resetSourceZoom) { Text("Redefinir") }
+        }
         Slider(
             value = state.sourcePositionMs.toFloat().coerceIn(0f, project.metadata.durationMs.toFloat()),
             onValueChange = { viewModel.seekTo(it.toLong()) },
@@ -413,6 +538,18 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
             IconButton(onClick = viewModel::finishRecording, modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape)) { Icon(Icons.Default.Stop, "Finalizar") }
         }
     }
+}
+
+private fun pointerStyleLabel(style: PointerStyle) = when (style) {
+    PointerStyle.FINGER -> "Dedo"
+    PointerStyle.ARROW -> "Seta"
+    PointerStyle.MOUSE -> "Mouse"
+}
+
+private fun cameraShapeLabel(shape: CameraShape) = when (shape) {
+    CameraShape.CIRCLE -> "Círculo"
+    CameraShape.SQUARE -> "Quadrado"
+    CameraShape.ROUNDED_RECTANGLE -> "Arredondado"
 }
 
 @Composable

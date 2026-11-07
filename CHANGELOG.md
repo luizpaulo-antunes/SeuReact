@@ -6,9 +6,26 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 
 ### Planejado
 
-- Aplicar máscaras circular e arredondada no compositor exportado.
 - Executar a matriz completa de validação em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
+
+## 0.2.0 - 2026-11-07
+
+### Adicionado
+
+- Máscaras circular, quadrada e arredondada aplicadas à câmera no MP4 por shader OpenGL.
+- Zoom de `1x` a `4x` na fonte, registrado na timeline e reproduzido na exportação.
+- Apontadores temporários de dedo, seta e mouse para destacar regiões do vídeo.
+- Migração Room `1 → 2` para persistir os novos eventos sem perder projetos existentes.
+
+### Corrigido
+
+- A opção de proporção `Original` agora respeita a rotação codificada do vídeo e preserva fontes verticais.
+- Controles de gravação reorganizados para facilitar o uso com uma mão.
+
+### Qualidade
+
+- Vinte e um testes unitários, Android Lint, APK debug e APK de testes instrumentados validados localmente.
 
 ## 0.1.3 - 2026-11-07
 

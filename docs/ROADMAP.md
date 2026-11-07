@@ -2,17 +2,19 @@
 
 O roadmap é organizado em releases pequenas e verificáveis. Datas são definidas quando uma versão entra em desenvolvimento.
 
-## 0.2.0 — Composição visual
+## 0.2.0 — Composição visual (entregue em 2026-11-07)
 
 - Máscaras circular, quadrada e retângulo arredondado no MP4 final.
-- Crop e letterbox validados para original, 9:16, 16:9 e 1:1.
-- Reposicionamento e escala com limites adaptados à proporção de saída.
-- Testes de exportação com vídeos verticais e horizontais.
+- Proporção original corrigida para vídeos com rotação 90° e 270°.
+- Zoom de fonte persistido na timeline e aplicado na exportação.
+- Apontadores de dedo, seta e mouse incorporados ao vídeo final.
+- Controles de gravação reorganizados para uso com uma mão.
 
 ## 0.3.0 — Robustez de mídia
 
 - Calibração de offset inicial entre CameraX e relógio monotônico.
 - Matriz de codecs, vídeos sem áudio, HDR e taxas de amostragem variadas.
+- Validação física de crop, letterbox e shaders em vídeos verticais e horizontais.
 - Tratamento dedicado para pouco espaço e falhas de encoder.
 - Métricas locais de duração e drift audiovisual para diagnóstico.
 

@@ -7,9 +7,12 @@ import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.OutputAspect
 import com.seureact.app.domain.model.OutputResolution
+import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.PointerStyle
 import com.seureact.app.domain.model.ProjectStatus
 import com.seureact.app.domain.model.ReactionProject
 import com.seureact.app.domain.model.SourceMetadata
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.model.TimelineEvent
 
 fun ReactionProject.toEntity() = ProjectEntity(
@@ -64,6 +67,15 @@ fun TimelineEvent.toEntity(projectId: String): TimelineEventEntity = when (this)
     )
     is TimelineEvent.CameraShapeChanged -> base(projectId, "CAMERA_SHAPE", cameraShape = shape.name)
     is TimelineEvent.CameraSwitched -> base(projectId, "CAMERA_SWITCHED", cameraFacing = facing.name)
+    is TimelineEvent.SourceTransformChanged -> base(
+        projectId, "SOURCE_TRANSFORM", floatValue = transform.scale,
+        centerX = transform.focusX, centerY = transform.focusY,
+    )
+    is TimelineEvent.PointerPlaced -> base(
+        projectId, "POINTER_PLACED", centerX = marker.x, centerY = marker.y,
+        stringValue = marker.style.name,
+    )
+    is TimelineEvent.PointerCleared -> base(projectId, "POINTER_CLEARED")
     is TimelineEvent.SessionFinished -> base(projectId, "SESSION_FINISHED")
 }
 
@@ -79,11 +91,12 @@ private fun TimelineEvent.base(
     mirrored: Boolean? = null,
     cameraShape: String? = null,
     cameraFacing: String? = null,
+    stringValue: String? = null,
 ) = TimelineEventEntity(
     projectId = projectId, type = type, finalTimeNanos = finalTimeNanos,
     sourcePositionMs = sourcePositionMs, booleanValue = booleanValue, floatValue = floatValue,
     centerX = centerX, centerY = centerY, width = width, height = height, mirrored = mirrored,
-    cameraShape = cameraShape, cameraFacing = cameraFacing,
+    cameraShape = cameraShape, cameraFacing = cameraFacing, stringValue = stringValue,
 )
 
 fun TimelineEventEntity.toDomain(): TimelineEvent = when (type) {
@@ -101,6 +114,14 @@ fun TimelineEventEntity.toDomain(): TimelineEvent = when (type) {
     "CAMERA_TRANSFORM" -> TimelineEvent.CameraTransformChanged(finalTimeNanos, sourcePositionMs, transform())
     "CAMERA_SHAPE" -> TimelineEvent.CameraShapeChanged(finalTimeNanos, sourcePositionMs, CameraShape.valueOf(cameraShape!!))
     "CAMERA_SWITCHED" -> TimelineEvent.CameraSwitched(finalTimeNanos, sourcePositionMs, CameraFacing.valueOf(cameraFacing!!))
+    "SOURCE_TRANSFORM" -> TimelineEvent.SourceTransformChanged(
+        finalTimeNanos, sourcePositionMs, SourceTransform(floatValue ?: 1f, centerX ?: 0.5f, centerY ?: 0.5f),
+    )
+    "POINTER_PLACED" -> TimelineEvent.PointerPlaced(
+        finalTimeNanos, sourcePositionMs,
+        PointerMarker(centerX ?: 0.5f, centerY ?: 0.5f, PointerStyle.valueOf(stringValue ?: PointerStyle.FINGER.name)),
+    )
+    "POINTER_CLEARED" -> TimelineEvent.PointerCleared(finalTimeNanos, sourcePositionMs)
     "SESSION_FINISHED" -> TimelineEvent.SessionFinished(finalTimeNanos, sourcePositionMs)
     else -> error("Tipo de evento desconhecido: $type")
 }

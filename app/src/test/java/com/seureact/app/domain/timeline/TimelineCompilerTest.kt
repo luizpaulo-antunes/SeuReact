@@ -2,6 +2,9 @@ package com.seureact.app.domain.timeline
 
 import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraTransform
+import com.seureact.app.domain.model.PointerMarker
+import com.seureact.app.domain.model.PointerStyle
+import com.seureact.app.domain.model.SourceTransform
 import com.seureact.app.domain.model.TimelineEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -77,6 +80,35 @@ class TimelineCompilerTest {
         ))
         assertEquals(transform, segments[1].cameraTransform)
         assertEquals(CameraShape.ROUNDED_RECTANGLE, segments[2].cameraShape)
+    }
+
+    @Test
+    fun `source zoom remains active until changed`() {
+        val transform = SourceTransform(scale = 2.5f, focusX = 0.25f, focusY = 0.7f)
+        val segments = compiler.compile(listOf(
+            start(),
+            TimelineEvent.SourceTransformChanged(ms(1_000), 1_000, transform),
+            finish(3_000, 3_000),
+        ))
+
+        assertEquals(SourceTransform(), segments[0].sourceTransform)
+        assertEquals(transform, segments[1].sourceTransform)
+    }
+
+    @Test
+    fun `pointer appears and clears on final timeline`() {
+        val marker = PointerMarker(0.3f, 0.6f, PointerStyle.ARROW)
+        val segments = compiler.compile(listOf(
+            start(),
+            TimelineEvent.PointerPlaced(ms(1_000), 1_000, marker),
+            TimelineEvent.PointerCleared(ms(1_900), 1_900),
+            finish(3_000, 3_000),
+        ))
+
+        assertEquals(null, segments[0].pointerMarker)
+        assertEquals(marker, segments[1].pointerMarker)
+        assertEquals(900, segments[1].durationNanos / 1_000_000)
+        assertEquals(null, segments[2].pointerMarker)
     }
 
     @Test(expected = IllegalArgumentException::class)
