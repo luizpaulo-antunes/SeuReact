@@ -15,8 +15,8 @@ android {
         applicationId = "com.seureact.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.2.2-rc.5"
+        versionCode = 12
+        versionName = "0.3.0-rc.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -65,7 +65,7 @@ dependencies {
     implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("androidx.media3:media3-effect:$media3Version")
 
-    val cameraVersion = "1.6.2"
+    val cameraVersion = "1.7.0"
     implementation("androidx.camera:camera-core:$cameraVersion")
     implementation("androidx.camera:camera-camera2:$cameraVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraVersion")

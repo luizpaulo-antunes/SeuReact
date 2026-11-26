@@ -101,7 +101,11 @@ class TimelineCompiler {
             is TimelineEvent.MicrophoneVolumeChanged -> copy(sourcePositionMs = event.sourcePositionMs, microphoneVolume = event.volume.coerceIn(0f, 2f))
             is TimelineEvent.CameraTransformChanged -> copy(sourcePositionMs = event.sourcePositionMs, transform = event.transform)
             is TimelineEvent.CameraShapeChanged -> copy(sourcePositionMs = event.sourcePositionMs, shape = event.shape)
-            is TimelineEvent.CameraSwitched -> copy(sourcePositionMs = event.sourcePositionMs, facing = event.facing)
+            is TimelineEvent.CameraSwitched -> copy(
+                sourcePositionMs = event.sourcePositionMs,
+                facing = event.facing,
+                transform = transform.copy(mirrored = event.facing == CameraFacing.FRONT),
+            )
             is TimelineEvent.SourceTransformChanged -> copy(sourcePositionMs = event.sourcePositionMs, sourceTransform = event.transform)
             is TimelineEvent.PointerPlaced -> copy(sourcePositionMs = event.sourcePositionMs, pointerMarker = event.marker)
             is TimelineEvent.PointerCleared -> copy(sourcePositionMs = event.sourcePositionMs, pointerMarker = null)

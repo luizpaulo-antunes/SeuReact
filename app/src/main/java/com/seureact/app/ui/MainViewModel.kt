@@ -42,13 +42,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class AppScreen { HOME, STUDIO, EXPORT }
+enum class AppScreen { HOME, STUDIO, DUAL_CAMERA, EXPORT }
 
 data class MainUiState(
     val screen: AppScreen = AppScreen.HOME,
     val project: ReactionProject? = null,
     val importing: Boolean = false,
     val isRecording: Boolean = false,
+    val isSwitchingCamera: Boolean = false,
     val isFinalizing: Boolean = false,
     val isDiscarding: Boolean = false,
     val isPlaying: Boolean = false,
@@ -117,6 +118,11 @@ class MainViewModel(application: Application, private val container: AppContaine
         }
     }
 
+    fun openDualCamera() {
+        player.pause()
+        mutableState.value = MainUiState(screen = AppScreen.DUAL_CAMERA)
+    }
+
     fun updateSetup(
         shape: CameraShape? = null,
         aspect: OutputAspect? = null,
@@ -161,8 +167,12 @@ class MainViewModel(application: Application, private val container: AppContaine
     }
 
     fun startRecording(controller: CameraCaptureController) {
-        val project = mutableState.value.project ?: return
+        val currentProject = mutableState.value.project ?: return
         if (mutableState.value.isRecording || mutableState.value.isFinalizing || activeRecordingProjectId != null) return
+        val project = currentProject.copy(
+            cameraFacing = controller.activeFacing,
+            cameraTransform = currentProject.cameraTransform.copy(mirrored = controller.activeFacing == CameraFacing.FRONT),
+        )
         val rawFile = File(getApplication<Application>().filesDir, "projects/${project.id}/camera.mp4")
         recordingController = controller
         clock = null
@@ -194,7 +204,12 @@ class MainViewModel(application: Application, private val container: AppContaine
                         sourceTransform = mutableState.value.sourceTransform,
                     ))
                     mutableState.value = mutableState.value.copy(
-                        project = updated, isRecording = true, isPlaying = true, activePointer = null, message = null,
+                        project = updated,
+                        isRecording = true,
+                        isSwitchingCamera = false,
+                        isPlaying = true,
+                        activePointer = null,
+                        message = null,
                     )
                     player.play()
                 }
@@ -202,6 +217,60 @@ class MainViewModel(application: Application, private val container: AppContaine
             onFinalized = { completeRecording(project.id, null) },
         ) }.onFailure { error ->
             completeRecording(project.id, error.message ?: "Não foi possível iniciar a câmera.")
+        }
+    }
+
+    fun switchCamera() {
+        val controller = recordingController ?: return
+        if (!mutableState.value.isRecording || mutableState.value.isSwitchingCamera) return
+        mutableState.value = mutableState.value.copy(isSwitchingCamera = true, message = null)
+        viewModelScope.launch {
+            val facing = try {
+                controller.switchCamera()
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(
+                    isSwitchingCamera = false,
+                    message = error.message ?: "Não foi possível trocar de câmera.",
+                )
+                return@launch
+            }
+            val project = mutableState.value.project ?: return@launch
+            if (!mutableState.value.isRecording || activeRecordingProjectId != project.id) {
+                mutableState.value = mutableState.value.copy(isSwitchingCamera = false)
+                return@launch
+            }
+            val sessionClock = clock
+            if (sessionClock == null) {
+                mutableState.value = mutableState.value.copy(isSwitchingCamera = false)
+                interruptRecording("A troca de câmera não pôde ser registrada na timeline.")
+                return@launch
+            }
+            val eventTimeNanos = sessionClock.elapsedNanos()
+            val sourcePositionMs = player.currentPosition
+            val updated = project.copy(
+                cameraFacing = facing,
+                cameraTransform = project.cameraTransform.copy(mirrored = facing == CameraFacing.FRONT),
+                updatedAtEpochMs = System.currentTimeMillis(),
+            )
+            mutableState.value = mutableState.value.copy(
+                project = updated,
+                isSwitchingCamera = false,
+            )
+            try {
+                repository.appendEvent(
+                    updated.id,
+                    TimelineEvent.CameraSwitched(eventTimeNanos, sourcePositionMs, facing),
+                )
+            } catch (_: Exception) {
+                interruptRecording("A troca de câmera não pôde ser salva. O material bruto foi preservado.")
+                return@launch
+            }
+            runCatching { repository.updateProject(updated) }
+                .onFailure {
+                    mutableState.value = mutableState.value.copy(
+                        message = "A câmera foi trocada, mas a preferência não pôde ser salva.",
+                    )
+                }
         }
     }
 
@@ -306,6 +375,7 @@ class MainViewModel(application: Application, private val container: AppContaine
         interruptionReason = null
         mutableState.value = mutableState.value.copy(
             isRecording = false,
+            isSwitchingCamera = false,
             isFinalizing = true,
             isDiscarding = false,
             isPlaying = false,
@@ -325,6 +395,7 @@ class MainViewModel(application: Application, private val container: AppContaine
         pointerClearJob?.cancel()
         mutableState.value = mutableState.value.copy(
             isRecording = false,
+            isSwitchingCamera = false,
             isFinalizing = true,
             isDiscarding = false,
             isPlaying = false,
@@ -341,6 +412,7 @@ class MainViewModel(application: Application, private val container: AppContaine
         pointerClearJob?.cancel()
         mutableState.value = mutableState.value.copy(
             isRecording = false,
+            isSwitchingCamera = false,
             isFinalizing = true,
             isDiscarding = true,
             isPlaying = false,
@@ -376,6 +448,7 @@ class MainViewModel(application: Application, private val container: AppContaine
             interruptionReason = null
             mutableState.value = mutableState.value.copy(
                 isRecording = false,
+                isSwitchingCamera = false,
                 isFinalizing = false,
                 isDiscarding = false,
                 isPlaying = false,
@@ -403,6 +476,7 @@ class MainViewModel(application: Application, private val container: AppContaine
             mutableState.value = mutableState.value.copy(
                 project = updated,
                 isRecording = false,
+                isSwitchingCamera = false,
                 isFinalizing = false,
                 isDiscarding = false,
                 isPlaying = false,

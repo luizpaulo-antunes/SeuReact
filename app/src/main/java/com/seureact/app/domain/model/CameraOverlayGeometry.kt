@@ -42,4 +42,6 @@ object CameraOverlayGeometry {
         OutputAspect.LANDSCAPE_16_9 -> 16f / 9f
         OutputAspect.SQUARE -> 1f
     }
+
+    fun usesLandscapeCanvas(project: ReactionProject): Boolean = outputAspectRatio(project) > 1f
 }
