@@ -12,6 +12,8 @@ O roadmap é organizado em releases pequenas e verificáveis. Datas são definid
 
 ## 0.3.0 — Robustez de mídia
 
+- Modo DualCam com composição simultânea frontal/traseira e troca de destaque durante a gravação.
+- Estúdio adaptativo para vídeos locais horizontais, com canvas fiel à proporção exportada.
 - Calibração de offset inicial entre CameraX e relógio monotônico.
 - Matriz de codecs, vídeos sem áudio, HDR e taxas de amostragem variadas.
 - Validação física de crop, letterbox e shaders em vídeos verticais e horizontais.

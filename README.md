@@ -1,6 +1,6 @@
 # Seu React
 
-Aplicativo Android nativo, offline, para gravar uma reação contínua enquanto um vídeo local é reproduzido, pausado ou reposicionado. O resultado é exportado como MP4 para `Filmes/SeuReact` sem capturar a interface do aplicativo.
+Aplicativo Android nativo e offline para criar reações. Um vídeo local pode ser reproduzido, pausado ou reposicionado enquanto a câmera grava o comentário; fontes horizontais abrem o estúdio em paisagem e permitem alternar entre frontal e traseira durante a mesma gravação. O modo DualCam independente grava simultaneamente a câmera traseira em tela cheia e a frontal em uma janela circular. Os resultados são salvos como MP4 em `Filmes/SeuReact` sem capturar a interface do aplicativo.
 
 ## Projeto
 
@@ -14,7 +14,7 @@ Aplicativo Android nativo, offline, para gravar uma reação contínua enquanto 
 - `domain`: projetos, eventos monotônicos e `TimelineCompiler` puro.
 - `data`: Room, persistência incremental e recuperação de gravações interrompidas.
 - `media/importer`: cópia privada e validação de trilhas com `MediaExtractor`.
-- `media/capture`: CameraX grava câmera e microfone continuamente.
+- `media/capture`: CameraX grava câmera e microfone continuamente e compõe câmeras concorrentes no modo DualCam.
 - `media/export`: Media3 Transformer usa MediaCodec/OpenGL/MediaMuxer internamente, reconstrói a fonte por segmentos, mistura áudio PCM com headroom e compõe picture-in-picture.
 - `worker`: exportação cancelável em WorkManager com progresso e notificação foreground.
 
@@ -29,13 +29,19 @@ Todo evento armazena o tempo final relativo a `elapsedRealtimeNanos` e a posiç�
 
 Pausas são exportadas como imagens com duração; seeks e repetições viram clipes consecutivos do arquivo original. Transformações, mute, volumes, zoom e apontadores são associados ao segmento vigente.
 
-Durante a gravação, a fonte aceita zoom de `1x` a `4x` e toque para destacar um ponto com os marcadores Toque, Seta ou Clique. Preview e MP4 usam os mesmos vetores e hotspots; na seta, a ponta termina exatamente no local tocado e a cauda se adapta às bordas. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
+Durante a gravação, a fonte aceita zoom de `1x` a `4x`, troca ao vivo entre as câmeras frontal e traseira e toque para destacar um ponto com os marcadores Toque, Seta ou Clique. A troca reutiliza a mesma gravação CameraX, mantendo áudio e timeline contínuos. Preview e MP4 usam os mesmos vetores e hotspots; na seta, a ponta termina exatamente no local tocado e a cauda se adapta às bordas. Esses efeitos pertencem à composição e aparecem no MP4 sem incluir os controles da interface. A sessão pode ser finalizada para exportar ou descartada, após confirmação, sem gerar um vídeo.
+
+Vídeos locais horizontais, incluindo arquivos em proporções comuns de YouTube como `16:9`, abrem automaticamente em paisagem. O canvas de preparação usa a proporção real da saída; por isso, posição, tamanho e formato circular, quadrado ou arredondado da câmera correspondem ao MP4 exportado. Links, streaming e download direto do YouTube não fazem parte do pipeline offline.
+
+O botão `Gravar com DualCam` abre um fluxo separado, sem vídeo de origem. Quando o aparelho expõe um par concorrente compatível, a câmera traseira ocupa o quadro e a frontal aparece em um círculo que pode ser arrastado, redimensionado e trocado com a câmera principal antes ou durante a gravação. A composição já é gravada em um único MP4; não existe uma etapa posterior de exportação.
 
 ## Requisitos
 
 - Android Studio com JDK 17.
 - Android SDK 36 e Build Tools correspondentes.
 - Aparelho físico Android 10 (API 29) ou superior, com câmera e microfone.
+
+O modo de reação funciona a partir do Android 10. O DualCam simultâneo requer Android 11 ou superior e um par frontal/traseiro anunciado pelo fabricante como câmera concorrente; aparelhos sem essa capacidade recebem uma mensagem de incompatibilidade sem afetar os demais recursos.
 
 O Gradle Wrapper 8.11.1 está incluído no repositório.
 
@@ -64,6 +70,9 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 | Cenário | Verificação |
 |---|---|
 | MP4 vertical e horizontal | letterbox/crop e orientação corretos |
+| Troca frontal/traseira | um único MP4 legível, áudio contínuo e espelhamento correto por trecho |
+| Estúdio horizontal | abre em paisagem; painel lateral não cobre o canvas; posição da câmera coincide com a saída |
+| DualCam simultâneo | traseira cheia + frontal circular; arrastar, redimensionar e trocar funcionam durante REC; MP4 abre com áudio |
 | Formato Original | mesma proporção visual da fonte, incluindo rotação 90°/270° |
 | Câmera circular/arredondada | máscara correta no preview e no MP4 |
 | Zoom e apontadores | enquadramento e destaque coincidem com a gravação |
@@ -83,6 +92,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 - O compositor Media3 é uma API marcada como instável; está isolado atrás de `ReactionExporter` para permitir troca por um pipeline MediaCodec/OpenGL próprio.
 - O crop e a máscara da câmera usam um efeito OpenGL que preserva as dimensões recebidas do decoder, evitando renegociação entre segmentos. Valide o pipeline nos aparelhos e GPUs que representam o público-alvo.
 - Arquivos HDR são tratados pelo comportamento padrão do Transformer; a matriz de validação deve incluir aparelhos e codecs usados pelo público-alvo.
+- A disponibilidade do DualCam depende do par de câmeras concorrentes exposto pelo fabricante ao CameraX. A candidata `0.3.0-rc.1` deve ser validada fisicamente quanto a enquadramento, espelhamento e estabilidade térmica antes de virar versão estável.
 
 ## Privacidade e arquivos
 

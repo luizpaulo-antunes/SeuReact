@@ -1,10 +1,14 @@
 package com.seureact.app.ui
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,23 +17,28 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -37,6 +46,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -45,6 +56,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -82,6 +94,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +107,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -102,8 +116,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -115,6 +134,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.common.util.UnstableApi
 import androidx.work.WorkInfo
 import com.seureact.app.domain.model.CameraShape
 import com.seureact.app.domain.model.CameraFacing
@@ -136,12 +157,35 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun ReactionApp(viewModel: MainViewModel, requestCapturePermissions: (() -> Unit) -> Unit) {
+fun ReactionApp(viewModel: MainViewModel, requestCapturePermissions: ((Boolean) -> Unit) -> Unit) {
     val state by viewModel.state.collectAsState()
     val projects by viewModel.projects.collectAsState()
+    val activity = LocalActivity.current
+    val requestedOrientation = when {
+        state.screen == AppScreen.STUDIO && (state.isRecording || state.isFinalizing) -> {
+            ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        }
+        state.screen == AppScreen.STUDIO &&
+            state.project?.let(CameraOverlayGeometry::usesLandscapeCanvas) == true -> {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+        else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
+    LaunchedEffect(activity, requestedOrientation) {
+        if (activity != null && activity.requestedOrientation != requestedOrientation) {
+            activity.requestedOrientation = requestedOrientation
+        }
+    }
     when (state.screen) {
-        AppScreen.HOME -> HomeScreen(projects, state, viewModel::importVideo, viewModel::openProject)
+        AppScreen.HOME -> HomeScreen(
+            projects,
+            state,
+            viewModel::importVideo,
+            viewModel::openProject,
+            viewModel::openDualCamera,
+        )
         AppScreen.STUDIO -> StudioScreen(state, viewModel, requestCapturePermissions)
+        AppScreen.DUAL_CAMERA -> DualCameraScreen(viewModel::backHome, requestCapturePermissions)
         AppScreen.EXPORT -> ExportScreen(state, viewModel)
     }
     state.message?.takeIf { state.screen != AppScreen.EXPORT }?.let { message ->
@@ -160,6 +204,7 @@ private fun HomeScreen(
     state: MainUiState,
     onImport: (Uri) -> Unit,
     onOpen: (ReactionProject) -> Unit,
+    onDualCamera: () -> Unit,
 ) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onImport) }
     val resumableProject = projects.firstOrNull {
@@ -187,7 +232,11 @@ private fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    HomeHero(importing = state.importing, onNewReaction = launchPicker)
+                    HomeHero(
+                        importing = state.importing,
+                        onNewReaction = launchPicker,
+                        onDualCamera = onDualCamera,
+                    )
                 }
                 resumableProject?.let { project ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -217,7 +266,11 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun HomeHero(importing: Boolean, onNewReaction: () -> Unit) {
+private fun HomeHero(
+    importing: Boolean,
+    onNewReaction: () -> Unit,
+    onDualCamera: () -> Unit,
+) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(
             Brush.linearGradient(
@@ -265,7 +318,7 @@ private fun HomeHero(importing: Boolean, onNewReaction: () -> Unit) {
             )
             Spacer(Modifier.height(22.dp))
             Button(
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 enabled = !importing,
                 onClick = onNewReaction,
                 colors = ButtonDefaults.buttonColors(
@@ -284,6 +337,21 @@ private fun HomeHero(importing: Boolean, onNewReaction: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Text("Criar novo react")
                 }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onDualCamera,
+                enabled = !importing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White,
+                    disabledContentColor = Color.White.copy(alpha = 0.6f),
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.52f)),
+            ) {
+                Icon(Icons.Default.Cameraswitch, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Gravar com DualCam")
             }
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -568,7 +636,7 @@ private fun sourceOrientationLabel(project: ReactionProject) = when {
 private fun StudioScreen(
     state: MainUiState,
     viewModel: MainViewModel,
-    requestCapturePermissions: (() -> Unit) -> Unit,
+    requestCapturePermissions: ((Boolean) -> Unit) -> Unit,
 ) {
     val project = state.project ?: return
     val context = LocalContext.current
@@ -583,7 +651,7 @@ private fun StudioScreen(
     val window = (context as? android.app.Activity)?.window
     LaunchedEffect(Unit) {
         if (!capturePermissionsGranted) {
-            requestCapturePermissions { capturePermissionsGranted = true }
+            requestCapturePermissions { granted -> capturePermissionsGranted = granted }
         }
     }
     DisposableEffect(cameraController) {
@@ -606,114 +674,266 @@ private fun StudioScreen(
             delay(100)
         }
     }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val startRecording = {
+        if (capturePermissionsGranted) {
+            viewModel.startRecording(cameraController)
+        } else requestCapturePermissions { granted ->
+            capturePermissionsGranted = granted
+            if (granted) viewModel.startRecording(cameraController)
+        }
+    }
 
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background)) {
-            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-                Row(
-                    Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(
-                        enabled = !state.isRecording && !state.isFinalizing,
-                        onClick = viewModel::backHome,
-                    ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            when {
-                                state.isRecording -> "Gravando reação"
-                                state.isDiscarding -> "Descartando gravação"
-                                state.isFinalizing -> "Finalizando gravação"
-                                else -> "Preparar reação"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            project.metadata.displayName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (state.isRecording) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            shape = CircleShape,
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Default.FiberManualRecord, null, Modifier.size(13.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text("REC", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-                }
-            }
+            StudioHeader(state, project, isLandscape, viewModel::backHome)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Box(
-                Modifier.fillMaxWidth().weight(1f).background(androidx.compose.ui.graphics.Color.Black),
-                contentAlignment = Alignment.Center,
-            ) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize().graphicsLayer {
-                        scaleX = state.sourceTransform.scale
-                        scaleY = state.sourceTransform.scale
-                        transformOrigin = TransformOrigin(state.sourceTransform.focusX, state.sourceTransform.focusY)
+            if (isLandscape) {
+                Row(Modifier.fillMaxSize()) {
+                    ReactionCanvas(
+                        state = state,
+                        project = project,
+                        viewModel = viewModel,
+                        cameraController = cameraController,
+                        capturePermissionsGranted = capturePermissionsGranted,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    StudioControls(
+                        state = state,
+                        project = project,
+                        viewModel = viewModel,
+                        onStart = startRecording,
+                        landscape = true,
+                        modifier = Modifier.widthIn(min = 304.dp, max = 380.dp).fillMaxHeight(),
+                    )
+                }
+            } else {
+                ReactionCanvas(
+                    state = state,
+                    project = project,
+                    viewModel = viewModel,
+                    cameraController = cameraController,
+                    capturePermissionsGranted = capturePermissionsGranted,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+                StudioControls(
+                    state = state,
+                    project = project,
+                    viewModel = viewModel,
+                    onStart = startRecording,
+                    landscape = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudioHeader(
+    state: MainUiState,
+    project: ReactionProject,
+    compact: Boolean,
+    onBack: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+        Row(
+            Modifier.fillMaxWidth()
+                .heightIn(min = if (compact) 56.dp else 64.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(
+                enabled = !state.isRecording && !state.isFinalizing,
+                onClick = onBack,
+            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        state.isRecording -> "Gravando reação"
+                        state.isDiscarding -> "Descartando gravação"
+                        state.isFinalizing -> "Finalizando gravação"
+                        else -> "Preparar reação"
                     },
-                    factory = { PlayerView(it).apply { player = viewModel.player; useController = false } },
-                    update = { it.player = viewModel.player },
+                    style = MaterialTheme.typography.titleMedium,
                 )
-                if (state.isRecording) {
-                    SourceInteractionLayer(
-                        transform = state.sourceTransform,
-                        marker = state.activePointer,
-                        onTransform = viewModel::changeSourceTransform,
-                        onTap = viewModel::placePointer,
-                    )
-                }
-                CameraOverlay(
-                    project.cameraTransform,
-                    project.cameraShape,
-                    cameraController,
-                    project,
-                    capturePermissionsGranted,
-                    viewModel::changeTransform,
+                Text(
+                    project.metadata.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (state.isRecording) {
-                    Text(
-                        formatTime(state.elapsedNanos / 1_000_000L),
-                        modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).background(
-                            androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp),
-                        ).padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
             }
             if (state.isRecording) {
-                RecordingControls(state, project, viewModel)
-            } else if (state.isFinalizing) {
-                Row(
-                    Modifier.fillMaxWidth().height(90.dp).padding(20.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = CircleShape,
                 ) {
-                    CircularProgressIndicator(Modifier.size(28.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(if (state.isDiscarding) "Descartando gravação…" else "Finalizando câmera e microfone…")
-                }
-            } else PreparationControls(project, viewModel) {
-                if (capturePermissionsGranted) {
-                    viewModel.startRecording(cameraController)
-                } else requestCapturePermissions {
-                    capturePermissionsGranted = true
-                    viewModel.startRecording(cameraController)
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.FiberManualRecord, null, Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("REC", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+private fun ReactionCanvas(
+    state: MainUiState,
+    project: ReactionProject,
+    viewModel: MainViewModel,
+    cameraController: CameraCaptureController,
+    capturePermissionsGranted: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val outputAspectRatio = CameraOverlayGeometry.outputAspectRatio(project)
+    BoxWithConstraints(
+        modifier = modifier.background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        val availableAspectRatio = if (maxHeight.value > 0f) maxWidth.value / maxHeight.value else outputAspectRatio
+        val canvasWidth = if (availableAspectRatio > outputAspectRatio) maxHeight * outputAspectRatio else maxWidth
+        val canvasHeight = if (availableAspectRatio > outputAspectRatio) maxHeight else maxWidth / outputAspectRatio
+        Box(
+            Modifier.size(canvasWidth, canvasHeight).clipToBounds().background(Color.Black),
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    scaleX = state.sourceTransform.scale
+                    scaleY = state.sourceTransform.scale
+                    transformOrigin = TransformOrigin(state.sourceTransform.focusX, state.sourceTransform.focusY)
+                },
+                factory = {
+                    PlayerView(it).apply {
+                        player = viewModel.player
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    }
+                },
+                update = { it.player = viewModel.player },
+            )
+            if (state.isRecording) {
+                SourceInteractionLayer(
+                    transform = state.sourceTransform,
+                    marker = state.activePointer,
+                    onTransform = viewModel::changeSourceTransform,
+                    onTap = viewModel::placePointer,
+                )
+            }
+            CameraOverlay(
+                transform = project.cameraTransform,
+                shape = project.cameraShape,
+                controller = cameraController,
+                project = project,
+                capturePermissionsGranted = capturePermissionsGranted,
+                onTransform = viewModel::changeTransform,
+                onFacingResolved = viewModel::setCameraFacing,
+            )
+            if (state.isRecording) {
+                CameraSwitchButton(
+                    facing = project.cameraFacing,
+                    switching = state.isSwitchingCamera,
+                    onClick = viewModel::switchCamera,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                )
+                Text(
+                    formatTime(state.elapsedNanos / 1_000_000L),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).background(
+                        Color.Black.copy(alpha = 0.62f), RoundedCornerShape(8.dp),
+                    ).padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraSwitchButton(
+    facing: CameraFacing,
+    switching: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val view = LocalView.current
+    val destination = if (facing == CameraFacing.FRONT) "traseira" else "frontal"
+    Surface(
+        modifier = modifier.size(52.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        tonalElevation = 4.dp,
+    ) {
+        IconButton(
+            enabled = !switching,
+            modifier = Modifier.semantics {
+                contentDescription = "Trocar para câmera $destination"
+                if (switching) stateDescription = "Trocando câmera"
+            },
+            onClick = {
+                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                onClick()
+            },
+        ) {
+            if (switching) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Default.Cameraswitch, null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudioControls(
+    state: MainUiState,
+    project: ReactionProject,
+    viewModel: MainViewModel,
+    onStart: () -> Unit,
+    landscape: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        state.isRecording -> RecordingControls(state, project, viewModel, modifier, landscape)
+        state.isFinalizing -> FinalizingControls(
+            state,
+            if (landscape) modifier else modifier.height(90.dp),
+        )
+        else -> PreparationControls(
+            project,
+            viewModel,
+            onStart,
+            if (landscape) modifier else modifier.height(320.dp),
+            landscape,
+        )
+    }
+}
+
+@Composable
+private fun FinalizingControls(state: MainUiState, modifier: Modifier = Modifier) {
+    Row(
+        modifier.padding(20.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(Modifier.size(28.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(
+            if (state.isDiscarding) "Descartando gravação…" else "Finalizando câmera e microfone…",
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -811,6 +1031,7 @@ private fun CameraOverlay(
     project: ReactionProject,
     capturePermissionsGranted: Boolean,
     onTransform: (CameraTransform) -> Unit,
+    onFacingResolved: (CameraFacing) -> Unit,
 ) {
     val owner = LocalLifecycleOwner.current
     val density = LocalDensity.current
@@ -819,7 +1040,10 @@ private fun CameraOverlay(
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     LaunchedEffect(previewView, project.cameraFacing, capturePermissionsGranted) {
         if (capturePermissionsGranted) {
-            previewView?.let { controller.bind(owner, it, project.cameraFacing) }
+            previewView?.let {
+                val resolvedFacing = controller.bind(owner, it, project.cameraFacing)
+                if (resolvedFacing != project.cameraFacing) onFacingResolved(resolvedFacing)
+            }
         }
     }
     Box(Modifier.fillMaxSize().onSizeChanged { parentWidth = it.width; parentHeight = it.height }) {
@@ -876,11 +1100,20 @@ private fun CameraOverlay(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PreparationControls(project: ReactionProject, viewModel: MainViewModel, onStart: () -> Unit) {
+private fun PreparationControls(
+    project: ReactionProject,
+    viewModel: MainViewModel,
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
+    landscape: Boolean = false,
+) {
+    val panelShape = if (landscape) {
+        RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+    } else {
+        RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+    }
     LazyColumn(
-        modifier = Modifier.fillMaxWidth().height(320.dp).clip(
-            RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
-        ).background(MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = modifier.clip(panelShape).background(MaterialTheme.colorScheme.surfaceContainerLow),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -889,7 +1122,11 @@ private fun PreparationControls(project: ReactionProject, viewModel: MainViewMod
                 Column(Modifier.weight(1f)) {
                     Text("Monte seu enquadramento", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Ajuste a câmera antes de começar",
+                        if (landscape) {
+                            "Modo paisagem: arraste ou redimensione a câmera sobre o vídeo"
+                        } else {
+                            "Arraste ou redimensione a câmera antes de começar"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -932,7 +1169,7 @@ private fun PreparationControls(project: ReactionProject, viewModel: MainViewMod
             }
         }
         item {
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                 Icon(Icons.Default.Mic, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Começar a gravar")
@@ -946,14 +1183,23 @@ private fun <T> ChoiceRow(title: String, values: List<T>, selected: T, label: (T
     Column {
         Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(3.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             values.forEach { value -> FilterChip(selected == value, { onSelect(value) }, { Text(label(value)) }) }
         }
     }
 }
 
 @Composable
-private fun RecordingControls(state: MainUiState, project: ReactionProject, viewModel: MainViewModel) {
+private fun RecordingControls(
+    state: MainUiState,
+    project: ReactionProject,
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier,
+    landscape: Boolean = false,
+) {
     var confirmDiscard by remember { mutableStateOf(false) }
     var toolsExpanded by remember { mutableStateOf(false) }
     if (confirmDiscard) {
@@ -970,10 +1216,15 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
             },
         )
     }
+    val panelShape = if (landscape) {
+        RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
+    } else {
+        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    }
     Column(
-        Modifier.fillMaxWidth().background(
+        modifier.verticalScroll(rememberScrollState()).background(
             MaterialTheme.colorScheme.surfaceContainer,
-            RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            panelShape,
         ).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1069,7 +1320,7 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { confirmDiscard = true },
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 Icon(Icons.Default.DeleteOutline, null)
                 Spacer(Modifier.width(6.dp))
@@ -1077,7 +1328,7 @@ private fun RecordingControls(state: MainUiState, project: ReactionProject, view
             }
             Button(
                 onClick = viewModel::finishRecording,
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 Icon(Icons.Default.Stop, null)
                 Spacer(Modifier.width(6.dp))

@@ -1,6 +1,7 @@
 package com.seureact.app.domain.timeline
 
 import com.seureact.app.domain.model.CameraShape
+import com.seureact.app.domain.model.CameraFacing
 import com.seureact.app.domain.model.CameraTransform
 import com.seureact.app.domain.model.PointerMarker
 import com.seureact.app.domain.model.PointerStyle
@@ -80,6 +81,24 @@ class TimelineCompilerTest {
         ))
         assertEquals(transform, segments[1].cameraTransform)
         assertEquals(CameraShape.ROUNDED_RECTANGLE, segments[2].cameraShape)
+    }
+
+    @Test
+    fun `camera switch updates facing and mirror without interrupting timeline`() {
+        val segments = compiler.compile(listOf(
+            start(),
+            TimelineEvent.CameraSwitched(ms(1_000), 1_000, CameraFacing.BACK),
+            TimelineEvent.CameraSwitched(ms(2_000), 2_000, CameraFacing.FRONT),
+            finish(3_000, 3_000),
+        ))
+
+        assertEquals(CameraFacing.FRONT, segments[0].cameraFacing)
+        assertTrue(segments[0].cameraTransform.mirrored)
+        assertEquals(CameraFacing.BACK, segments[1].cameraFacing)
+        assertFalse(segments[1].cameraTransform.mirrored)
+        assertEquals(CameraFacing.FRONT, segments[2].cameraFacing)
+        assertTrue(segments[2].cameraTransform.mirrored)
+        assertEquals(3_000, segments.sumOf { it.durationNanos } / 1_000_000)
     }
 
     @Test

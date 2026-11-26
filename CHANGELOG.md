@@ -4,10 +4,39 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 
 ## Não lançado
 
-### Planejado
+## 0.3.0-rc.1 - 2026-11-26
 
-- Executar a matriz completa de validação em aparelhos físicos.
+### Adicionado
+
+- Modo DualCam independente, com câmera traseira em tela cheia e frontal circular gravadas simultaneamente no mesmo MP4.
+- Janela menor do DualCam arrastável e redimensionável, com troca ao vivo entre a câmera principal e a câmera em destaque.
+- Salvamento direto da gravação DualCam em `Filmes/SeuReact`, seguido por confirmação e ação para assistir ao resultado.
+- Troca entre câmera frontal e traseira durante a gravação, preservando um único arquivo de câmera e áudio contínuo.
+- Estúdio automático em paisagem para fontes e saídas horizontais, com controles em painel lateral.
+- Canvas de preparação na proporção real da saída, mantendo a câmera arrastável e redimensionável nos formatos circular, quadrado e arredondado.
+
+### Interface
+
+- Nova entrada `Gravar com DualCam` na Home, com fluxo próprio de permissão, preparação, gravação, finalização e resultado.
+- Estados dedicados para aparelho incompatível, permissão negada, preparação, gravação, salvamento e erro recuperável.
+
+### Corrigido
+
+- Espelhamento da câmera agora acompanha cada troca de lente na timeline e no MP4 exportado.
+- Posição e tamanho do overlay no preview agora correspondem ao resultado exportado, inclusive em `16:9`.
+- Orientação fica travada durante gravação e finalização para evitar interrupção por rotação do aparelho.
+
+### Validação pendente
+
+- Validar em aparelho físico a composição concorrente, espelhamento, troca principal/PiP e o MP4 salvo pelo CameraX 1.7.
+- Executar a matriz completa de validação de reações horizontais em aparelhos físicos.
 - Refinar sincronização por modelo de aparelho e codecs HDR.
+
+### Qualidade
+
+- Quarenta e cinco testes unitários aprovados, incluindo geometria do DualCam, orientação e troca de lente na timeline.
+- Android Lint aprovado sem erros ou avisos.
+- APK debug e APK de testes instrumentados compilados localmente.
 
 ## 0.2.2-rc.5 - 2026-11-07
 

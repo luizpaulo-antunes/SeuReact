@@ -1,6 +1,7 @@
 package com.seureact.app.domain.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,4 +29,24 @@ class CameraOverlayGeometryTest {
         assertTrue(transform.centerX <= 1f - size.width / 2f)
         assertTrue(transform.centerY <= 1f - size.height / 2f)
     }
+
+    @Test
+    fun `original horizontal source automatically uses landscape canvas`() {
+        val project = project(width = 1920, height = 1080)
+
+        assertTrue(CameraOverlayGeometry.usesLandscapeCanvas(project))
+    }
+
+    @Test
+    fun `original portrait source keeps portrait canvas`() {
+        val project = project(width = 1080, height = 1920)
+
+        assertFalse(CameraOverlayGeometry.usesLandscapeCanvas(project))
+    }
+
+    private fun project(width: Int, height: Int) = ReactionProject(
+        sourceUri = "content://source",
+        localSourcePath = "/source.mp4",
+        metadata = SourceMetadata("source.mp4", 1_000, width, height, true, "video/mp4"),
+    )
 }

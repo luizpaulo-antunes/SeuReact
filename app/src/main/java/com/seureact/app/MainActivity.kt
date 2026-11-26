@@ -19,12 +19,11 @@ class MainActivity : ComponentActivity() {
         val app = application as ReactionApplication
         MainViewModelFactory(app, app.container)
     }
-    private var permissionGrantedAction: (() -> Unit)? = null
+    private var permissionResultAction: ((Boolean) -> Unit)? = null
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        if (grants[Manifest.permission.CAMERA] == true && grants[Manifest.permission.RECORD_AUDIO] == true) {
-            permissionGrantedAction?.invoke()
-        }
-        permissionGrantedAction = null
+        val granted = grants[Manifest.permission.CAMERA] == true && grants[Manifest.permission.RECORD_AUDIO] == true
+        permissionResultAction?.invoke(granted)
+        permissionResultAction = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,9 +39,9 @@ class MainActivity : ComponentActivity() {
                         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
                             android.content.pm.PackageManager.PERMISSION_GRANTED
                         if (cameraGranted && audioGranted) {
-                            action()
+                            action(true)
                         } else {
-                            permissionGrantedAction = action
+                            permissionResultAction = action
                             val permissions = buildList {
                                 add(Manifest.permission.CAMERA)
                                 add(Manifest.permission.RECORD_AUDIO)
