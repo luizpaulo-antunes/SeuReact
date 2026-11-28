@@ -4,6 +4,18 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 
 ## Não lançado
 
+## 0.3.0-rc.2 - 2026-11-28
+
+### Corrigido
+
+- A janela menor do DualCam agora usa escala uniforme nos dois eixos, preservando a proporção da câmera sem achatar rostos ou objetos.
+- A área de arraste e os limites da janela menor acompanham a geometria real exibida na prévia e gravada no MP4.
+
+### Qualidade
+
+- Teste de regressão garante que a composição Picture-in-Picture mantenha a mesma escala horizontal e vertical.
+- Release candidate destinada à validação física do enquadramento da câmera menor em aparelhos com câmeras concorrentes.
+
 ## 0.3.0-rc.1 - 2026-11-26
 
 ### Adicionado

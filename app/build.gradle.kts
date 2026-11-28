@@ -15,8 +15,8 @@ android {
         applicationId = "com.seureact.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.3.0-rc.1"
+        versionCode = 13
+        versionName = "0.3.0-rc.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

@@ -92,7 +92,7 @@ Use vídeos curtos antes dos cenários longos e confira duração, sincronia lab
 - O compositor Media3 é uma API marcada como instável; está isolado atrás de `ReactionExporter` para permitir troca por um pipeline MediaCodec/OpenGL próprio.
 - O crop e a máscara da câmera usam um efeito OpenGL que preserva as dimensões recebidas do decoder, evitando renegociação entre segmentos. Valide o pipeline nos aparelhos e GPUs que representam o público-alvo.
 - Arquivos HDR são tratados pelo comportamento padrão do Transformer; a matriz de validação deve incluir aparelhos e codecs usados pelo público-alvo.
-- A disponibilidade do DualCam depende do par de câmeras concorrentes exposto pelo fabricante ao CameraX. A candidata `0.3.0-rc.1` deve ser validada fisicamente quanto a enquadramento, espelhamento e estabilidade térmica antes de virar versão estável.
+- A disponibilidade do DualCam depende do par de câmeras concorrentes exposto pelo fabricante ao CameraX. A candidata `0.3.0-rc.2` deve ser validada fisicamente quanto a enquadramento, proporção, espelhamento e estabilidade térmica antes de virar versão estável.
 
 ## Privacidade e arquivos
 

@@ -6,13 +6,13 @@ import org.junit.Test
 
 class DualCameraGeometryTest {
     @Test
-    fun `portrait pip remains physically square`() {
+    fun `pip uses uniform scale to preserve camera aspect ratio`() {
         val transform = DualCameraPipTransform(width = 0.32f)
 
         val composition = DualCameraGeometry.compositionTransform(transform)
 
         assertEquals(0.32f, composition.scaleX, 0.0001f)
-        assertEquals(0.18f, composition.scaleY, 0.0001f)
+        assertEquals(0.32f, composition.scaleY, 0.0001f)
     }
 
     @Test
