@@ -9,12 +9,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Rational
+import android.view.Surface
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CompositionSettings
 import androidx.camera.core.ConcurrentCamera
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -74,6 +77,7 @@ class DualCameraCaptureController(private val context: Context) {
             ?: throw DualCameraUnavailableException(
                 "O CameraX não encontrou um par frontal/traseiro que possa gravar simultaneamente.",
             )
+        val targetRotation = view.display?.rotation ?: Surface.ROTATION_0
         val recorder = Recorder.Builder()
             .setQualitySelector(
                 QualitySelector.from(
@@ -82,8 +86,11 @@ class DualCameraCaptureController(private val context: Context) {
                 ),
             )
             .build()
-        val capture = VideoCapture.Builder(recorder).build()
+        val capture = VideoCapture.Builder(recorder)
+            .setTargetRotation(targetRotation)
+            .build()
         val previewUseCase = Preview.Builder()
+            .setTargetRotation(targetRotation)
             .setResolutionSelector(
                 ResolutionSelector.Builder()
                     .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
@@ -91,9 +98,17 @@ class DualCameraCaptureController(private val context: Context) {
             )
             .build()
             .also { it.surfaceProvider = view.surfaceProvider }
+        val viewPort = ViewPort.Builder(
+            Rational(
+                DualCameraGeometry.PORTRAIT_OUTPUT_WIDTH,
+                DualCameraGeometry.PORTRAIT_OUTPUT_HEIGHT,
+            ),
+            targetRotation,
+        ).setScaleType(ViewPort.FILL_CENTER).build()
         val group = UseCaseGroup.Builder()
             .addUseCase(previewUseCase)
             .addUseCase(capture)
+            .setViewPort(viewPort)
             .build()
 
         val nextPipTransform = DualCameraGeometry.constrain(initialTransform)

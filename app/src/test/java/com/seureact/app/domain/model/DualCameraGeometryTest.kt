@@ -6,7 +6,14 @@ import org.junit.Test
 
 class DualCameraGeometryTest {
     @Test
-    fun `pip uses uniform scale to preserve camera aspect ratio`() {
+    fun `camera viewport matches portrait recording canvas`() {
+        assertEquals(9, DualCameraGeometry.PORTRAIT_OUTPUT_WIDTH)
+        assertEquals(16, DualCameraGeometry.PORTRAIT_OUTPUT_HEIGHT)
+        assertEquals(9f / 16f, DualCameraGeometry.PORTRAIT_OUTPUT_ASPECT_RATIO, 0.0001f)
+    }
+
+    @Test
+    fun `pip uses uniform scale after source crop`() {
         val transform = DualCameraPipTransform(width = 0.32f)
 
         val composition = DualCameraGeometry.compositionTransform(transform)

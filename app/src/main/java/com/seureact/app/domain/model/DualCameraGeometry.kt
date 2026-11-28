@@ -14,6 +14,8 @@ data class DualCameraCompositionTransform(
 )
 
 object DualCameraGeometry {
+    const val PORTRAIT_OUTPUT_WIDTH = 9
+    const val PORTRAIT_OUTPUT_HEIGHT = 16
     const val PORTRAIT_OUTPUT_ASPECT_RATIO = 9f / 16f
 
     fun pipHeight(transform: DualCameraPipTransform): Float = transform.width

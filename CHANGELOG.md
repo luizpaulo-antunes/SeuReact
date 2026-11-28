@@ -4,6 +4,18 @@ Todas as mudanças relevantes deste projeto são documentadas aqui. O projeto se
 
 ## Não lançado
 
+## 0.3.0-rc.3 - 2026-11-28
+
+### Corrigido
+
+- Os streams das câmeras frontal e traseira agora recebem o mesmo crop central em `9:16` antes da composição, evitando que buffers alternativos do modo concorrente sejam achatados dentro da janela menor.
+- A prévia DualCam usa o mesmo preenchimento central da gravação para manter o enquadramento exibido e o MP4 alinhados.
+
+### Qualidade
+
+- Teste de regressão fixa a proporção do viewport no mesmo formato vertical do canvas de gravação.
+- Release candidate destinada à nova validação física da câmera menor com ambas as lentes.
+
 ## 0.3.0-rc.2 - 2026-11-28
 
 ### Corrigido

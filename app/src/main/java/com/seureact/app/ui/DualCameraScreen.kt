@@ -125,7 +125,7 @@ fun DualCameraScreen(
     val previewView = remember {
         PreviewView(context).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            scaleType = PreviewView.ScaleType.FIT_CENTER
+            scaleType = PreviewView.ScaleType.FILL_CENTER
         }
     }
     fun hasPermissions(): Boolean =
